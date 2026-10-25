@@ -1,6 +1,6 @@
-# Blood Bank (simple version)
+# Blood Bank
 
-A small console program in C for a blood bank: donors, donations, stock per blood group,
+A console program in C for a blood bank: donors, donations, stock per blood group,
 hospital requests, and password-protected users.
 
 ## Build and run (Linux)
@@ -76,7 +76,3 @@ Valgrind to check for memory errors and leaks. Install the analysis tools on Ubu
     sudo apt install cppcheck valgrind
 
 Details and the expected MISRA findings are in `tools/README.md`.
-
-## Not included (compared with the larger version)
-User roles, login lockout, audit log, snapshots and unit tests. Stock is calculated by
-walking the batch list, which is fine for a small bank.
