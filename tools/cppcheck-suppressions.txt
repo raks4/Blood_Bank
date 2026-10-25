@@ -1,0 +1,5 @@
+# cppcheck suppressions. Add a line here ONLY with a reason next to it.
+# (Run `make check` first; add entries only for findings you have reviewed.)
+
+# The OpenSSL and POSIX headers are not part of this project.
+missingIncludeSystem
