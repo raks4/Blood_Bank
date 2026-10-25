@@ -2,16 +2,18 @@
 
     make check      # cppcheck on src/ (warnings, style, performance, portability, unused code)
     make analyze    # gcc -fanalyzer plus extra warnings (needs only gcc)
-    make valgrind   # run the GoogleTest suite under Valgrind
+    make valgrind   # run memory-focused tests under Valgrind
 
 ## cppcheck
 Install: `sudo apt install cppcheck` (version 2.x recommended). `make check` fails (exit code 1) on any
 finding, so a clean run means nothing is left to explain.
 
 ## Valgrind
-Install: `sudo apt install valgrind`. `make valgrind` builds the debug-enabled test suite and runs it
-with full leak checks. Invalid memory accesses and definite or indirect leaks cause a nonzero exit code;
-other leak categories are printed for inspection but do not fail the target.
+Install: `sudo apt install valgrind`. `make valgrind` builds the debug-enabled test suite and runs
+the blood, donor, storage and utility tests with full leak checks. It skips the menu and user tests,
+which spend most of their runtime in password hashing. Invalid memory accesses and definite or indirect
+leaks cause a nonzero exit code; other leak categories are printed for inspection but do not fail the
+target. Run `make test` for the complete suite.
 
 ## MISRA checks with cppcheck
 cppcheck's MISRA addon needs the text of the MISRA rules, which is licensed and not included here.

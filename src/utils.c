@@ -76,9 +76,8 @@ int copy_text(char *destination, int size, const char *source)
 void wipe(char *buffer, int size)
 {
     volatile char *p = buffer;
-    int i;
 
-    for (i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
         p[i] = '\0';
     }
 }
@@ -101,7 +100,6 @@ static void trim(char *text)
 {
     int length = (int)strlen(text);
     int start = 0;
-    int i;
 
     while ((length > 0) && (text[length - 1] == ' ')) {
         length--;
@@ -111,7 +109,7 @@ static void trim(char *text)
         start++;
     }
     if (start > 0) {
-        for (i = 0; i <= (length - start); i++) {
+        for (int i = 0; i <= (length - start); i++) {
             text[i] = text[i + start];
         }
     }
@@ -122,7 +120,6 @@ static void trim(char *text)
 int read_line(const char *prompt, char *buffer, int size)
 {
     int ok = 0;
-    int length;
 
     printf("%s", prompt);
     (void)fflush(stdout);
@@ -130,7 +127,7 @@ int read_line(const char *prompt, char *buffer, int size)
         buffer[0] = '\0';
         input_ended = 1;
     } else {
-        length = (int)strlen(buffer);
+        int length = (int)strlen(buffer);
         if ((length > 0) && (buffer[length - 1] == '\n')) {
             buffer[length - 1] = '\0';
         } else if (feof(stdin) == 0) {
@@ -348,11 +345,11 @@ long today(void)
 int current_year(void)
 {
     time_t now = time(NULL);
-    struct tm *parts = localtime(&now);
+    struct tm parts;
     int year = 1970;
 
-    if (parts != NULL) {
-        year = parts->tm_year + 1900;
+    if (localtime_r(&now, &parts) != NULL) {
+        year = parts.tm_year + 1900;
     }
     return year;
 }
@@ -361,9 +358,10 @@ int current_year(void)
 void format_date(long when, char *buffer, int size)
 {
     time_t moment = (time_t)when;
-    struct tm *parts = localtime(&moment);
+    struct tm parts;
 
-    if ((parts == NULL) || (strftime(buffer, (size_t)size, "%Y-%m-%d", parts) == 0U)) {
+    if ((localtime_r(&moment, &parts) == NULL) ||
+        (strftime(buffer, (size_t)size, "%Y-%m-%d", &parts) == 0U)) {
         (void)copy_text(buffer, size, "unknown");
     }
 }

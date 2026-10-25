@@ -86,7 +86,7 @@ Result add_donor(Database *db, const char *name, const char *phone, int group,
     return result;
 }
 
-Result deactivate_donor(Database *db, int id)
+Result deactivate_donor(const Database *db, int id)
 {
     Result result = RESULT_OK;
     Donor *donor = find_donor(db, id);

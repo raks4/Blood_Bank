@@ -70,8 +70,9 @@ It has **not** been run through a MISRA checker. Known deviations, kept on purpo
 types, and a few early `return`s in the input-handling functions.
 
 ## Static analysis
-`make check` runs cppcheck, and `make analyze` runs GCC's analyzer. `make valgrind` runs the tests under
-Valgrind to check for memory errors and leaks. Install the analysis tools on Ubuntu with:
+`make check` runs cppcheck, and `make analyze` runs GCC's analyzer. `make valgrind` runs the memory-focused
+tests under Valgrind (excluding the slower menu and password-hashing tests) to check for memory errors
+and leaks. Install the analysis tools on Ubuntu with:
 
     sudo apt install cppcheck valgrind
 

@@ -52,7 +52,7 @@ static void add_donor_action(Database *db)
     }
 }
 
-static void deactivate_donor_action(Database *db)
+static void deactivate_donor_action(const Database *db)
 {
     int id = 0;
     Result result;
@@ -201,7 +201,7 @@ static void donation_menu(Database *db)
 /* Inventory                                                         */
 /* ================================================================ */
 
-static void test_batch_action(Database *db)
+static void test_batch_action(const Database *db)
 {
     int id = 0;
     int yes = 0;
@@ -226,7 +226,7 @@ static void test_batch_action(Database *db)
     }
 }
 
-static void discard_batch_action(Database *db)
+static void discard_batch_action(const Database *db)
 {
     int id = 0;
     int yes = 0;
@@ -251,7 +251,7 @@ static void discard_batch_action(Database *db)
     }
 }
 
-static void inventory_menu(Database *db)
+static void inventory_menu(const Database *db)
 {
     int choice = -1;
 
@@ -316,7 +316,7 @@ static void new_request_action(Database *db)
     }
 }
 
-static void process_request_action(Database *db)
+static void process_request_action(const Database *db)
 {
     int id = 0;
     Result result;
@@ -333,7 +333,7 @@ static void process_request_action(Database *db)
     }
 }
 
-static void reject_request_action(Database *db)
+static void reject_request_action(const Database *db)
 {
     int id = 0;
     Result result;
@@ -402,14 +402,13 @@ static void add_user_action(Database *db)
 {
     char username[USERNAME_LEN];
     char password[PASSWORD_LEN];
-    Result result;
 
     printf("\n--- Add a user ---\n");
     if (ask_text("New username: ", username, (int)sizeof(username)) == 0) {
         return;
     }
     if (ask_new_password(password, (int)sizeof(password)) != 0) {
-        result = create_user(db, username, password);
+        Result result = create_user(db, username, password);
         if (result == RESULT_OK) {
             printf("User %s created.\n", username);
             save_or_warn(db);
@@ -425,12 +424,11 @@ static void change_password_action(const Database *db, User *me)
 {
     char old_password[PASSWORD_LEN];
     char new_password[PASSWORD_LEN];
-    Result result;
 
     printf("\n--- Change my password ---\n");
     if (read_password("Current password: ", old_password, (int)sizeof(old_password)) != 0) {
         if (ask_new_password(new_password, (int)sizeof(new_password)) != 0) {
-            result = change_password(me, old_password, new_password);
+            Result result = change_password(me, old_password, new_password);
             if (result == RESULT_OK) {
                 printf("Password changed.\n");
                 save_or_warn(db);
@@ -468,14 +466,13 @@ static void first_run_setup(Database *db)
 {
     char username[USERNAME_LEN];
     char password[PASSWORD_LEN];
-    Result result;
 
     printf("Welcome! No users exist yet, so let us create the first one.\n");
     if (ask_text("Choose a username: ", username, (int)sizeof(username)) == 0) {
         return;
     }
     if (ask_new_password(password, (int)sizeof(password)) != 0) {
-        result = create_user(db, username, password);
+        Result result = create_user(db, username, password);
         if (result == RESULT_OK) {
             printf("User %s created.\n", username);
             save_or_warn(db);
@@ -494,9 +491,10 @@ static User *login(const Database *db)
 
     while ((attempt < MAX_LOGIN_ATTEMPTS) && (user == NULL) && (input_closed() == 0)) {
         char username[USERNAME_LEN];
-        char password[PASSWORD_LEN];
 
         if (read_line("Username: ", username, (int)sizeof(username)) != 0) {
+            char password[PASSWORD_LEN];
+
             if (read_password("Password: ", password, (int)sizeof(password)) != 0) {
                 User *found = find_user(db, username);
 

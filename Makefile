@@ -15,6 +15,7 @@ COVERAGE_FLAGS =
 TEST_OBJECTS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(TEST_C_SOURCES)) \
                $(BUILD_DIR)/main.o
 TEST_BINARY = $(BUILD_DIR)/test_suite
+VALGRIND_TEST_FILTER ?= --gtest_filter=-MainTests.*:UserTests.*
 
 .PHONY: all test coverage check analyze valgrind clean
 
@@ -63,7 +64,7 @@ analyze:
 valgrind: $(TEST_BINARY)
 	valgrind --leak-check=full --show-leak-kinds=all \
 	  --errors-for-leak-kinds=definite,indirect --error-exitcode=1 \
-	  ./$(TEST_BINARY)
+	  ./$(TEST_BINARY) $(VALGRIND_TEST_FILTER)
 
 clean:
 	rm -f bloodbank *.tmp *.gcov

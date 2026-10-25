@@ -83,7 +83,7 @@ Result record_donation(Database *db, Donor *donor, int ml, long now, int *batch_
 }
 
 /* Called when the blood tests are fine: the batch becomes usable. */
-Result mark_batch_tested(Database *db, int id, long now)
+Result mark_batch_tested(const Database *db, int id, long now)
 {
     Result result = RESULT_OK;
     Batch *batch = find_batch(db, id);
@@ -98,7 +98,7 @@ Result mark_batch_tested(Database *db, int id, long now)
     return result;
 }
 
-Result discard_batch(Database *db, int id)
+Result discard_batch(const Database *db, int id)
 {
     Result result = RESULT_OK;
     Batch *batch = find_batch(db, id);
@@ -291,7 +291,7 @@ Result add_request(Database *db, const char *hospital, int group, int ml, long n
 }
 
 /* Gives the blood to the hospital: takes it from the batches that expire first. */
-Result process_request(Database *db, int id, long now)
+Result process_request(const Database *db, int id, long now)
 {
     Result result = RESULT_OK;
     Request *request = find_request(db, id);
@@ -307,12 +307,11 @@ Result process_request(Database *db, int id, long now)
 
         while (still_needed > 0) {
             Batch *batch = oldest_usable_batch(db, request->group, now);
-            int taken;
 
             if (batch == NULL) {
                 still_needed = 0;               /* cannot happen: stock was checked above */
             } else {
-                taken = (batch->ml_left < still_needed) ? batch->ml_left : still_needed;
+                int taken = (batch->ml_left < still_needed) ? batch->ml_left : still_needed;
                 batch->ml_left = batch->ml_left - taken;
                 still_needed = still_needed - taken;
             }
@@ -322,7 +321,7 @@ Result process_request(Database *db, int id, long now)
     return result;
 }
 
-Result reject_request(Database *db, int id)
+Result reject_request(const Database *db, int id)
 {
     Result result = RESULT_OK;
     Request *request = find_request(db, id);

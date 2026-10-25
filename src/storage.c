@@ -151,9 +151,9 @@ static int read_donor(FILE *file, Donor *donor)
     char line[256];
     int fields;
     int consumed = 0;
-    size_t length;
 
     do {
+        size_t length;
         size_t whitespace;
 
         if (fgets(line, (int)sizeof(line), file) == NULL) {
