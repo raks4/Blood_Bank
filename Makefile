@@ -2,48 +2,31 @@
 CC = gcc
 CXX = g++
 
-CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow -O2
+CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow
 CXXFLAGS = -std=c++17 -Iinclude -Itests -Wall -Wextra -O0 -g
-
-SOURCES = $(wildcard src/*.c)
-HEADERS = $(wildcard include/*.h)
-TEST_SOURCES = $(wildcard tests/test_*.cpp)
-TEST_C_SOURCES = $(filter-out src/main.c,$(SOURCES))
-
-BUILD_DIR = build/tests
+TEST_BUILD = build/tests
 COVERAGE_FLAGS =
-TEST_OBJECTS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(TEST_C_SOURCES)) \
-               $(BUILD_DIR)/main.o
-TEST_BINARY = $(BUILD_DIR)/test_suite
-VALGRIND_TEST_FILTER ?= --gtest_filter=-MainTests.*:UserTests.*
 
 .PHONY: all test coverage check analyze valgrind clean
 
-all: bloodbank
+all:
+	$(CC) $(CFLAGS) -O2 -o bloodbank src/*.c -lcrypto
 
-bloodbank: $(SOURCES) $(HEADERS)
-	$(CC) $(CFLAGS) $(EXTRA) -o $@ $(SOURCES) -lcrypto
-
-$(BUILD_DIR):
-	mkdir -p $@
-
-$(BUILD_DIR)/%.o: src/%.c $(HEADERS) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(COVERAGE_FLAGS) $(EXTRA) -O0 -g -c $< -o $@
-
-$(BUILD_DIR)/main.o: src/main.c $(HEADERS) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(COVERAGE_FLAGS) $(EXTRA) -O0 -g -Dmain=bloodbank_app_main -c $< -o $@
-
-$(TEST_BINARY): $(TEST_SOURCES) $(TEST_OBJECTS) $(wildcard tests/*.hpp)
-	$(CXX) $(CXXFLAGS) $(COVERAGE_FLAGS) $(EXTRA) -o $@ $(TEST_SOURCES) $(TEST_OBJECTS) \
+test:
+	mkdir -p $(TEST_BUILD)
+	for source in src/*.c; do \
+	  name=$$(basename "$$source" .c); \
+	  if [ "$$name" = main ]; then extra=-Dmain=bloodbank_app_main; else extra=; fi; \
+	  $(CC) $(CFLAGS) -O0 -g $(COVERAGE_FLAGS) $$extra -c "$$source" -o $(TEST_BUILD)/$$name.o || exit 1; \
+	done
+	$(CXX) $(CXXFLAGS) $(COVERAGE_FLAGS) -o $(TEST_BUILD)/test_suite tests/test_*.cpp $(TEST_BUILD)/*.o \
 	  -lgtest_main -lgtest -lcrypto -pthread
-
-test: $(TEST_BINARY)
-	./$(TEST_BINARY)
+	./$(TEST_BUILD)/test_suite
 
 coverage:
 	rm -f build/coverage/*.gcda
-	$(MAKE) BUILD_DIR=build/coverage COVERAGE_FLAGS=--coverage test
-	gcov -b -c -o build/coverage $(SOURCES)
+	$(MAKE) test TEST_BUILD=build/coverage COVERAGE_FLAGS=--coverage
+	gcov -b -c -o build/coverage src/*.c
 
 check:
 	cppcheck --enable=all --inconclusive --std=c99 --language=c --platform=unix64 \
@@ -54,10 +37,10 @@ check:
 	    --suppressions-list=tools/cppcheck-suppressions.txt -Iinclude src; \
 	else echo "MISRA addon skipped: put your rule texts in tools/misra_rules.txt"; fi
 
-valgrind: $(TEST_BINARY)
+valgrind: test
 	valgrind --leak-check=full --show-leak-kinds=all \
 	  --errors-for-leak-kinds=definite,indirect --error-exitcode=1 \
-	  ./$(TEST_BINARY) $(VALGRIND_TEST_FILTER)
+	  ./$(TEST_BUILD)/test_suite --gtest_filter=-MainTests.*:UserTests.*
 
 clean:
 	rm -f bloodbank *.tmp *.gcov
