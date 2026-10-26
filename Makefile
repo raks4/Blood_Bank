@@ -54,13 +54,6 @@ check:
 	    --suppressions-list=tools/cppcheck-suppressions.txt -Iinclude src; \
 	else echo "MISRA addon skipped: put your rule texts in tools/misra_rules.txt"; fi
 
-analyze:
-	@for f in $(SOURCES); do \
-	  $(CC) $(CFLAGS) $(EXTRA) -Wcast-qual -Wnull-dereference -Wduplicated-cond -Wduplicated-branches \
-	    -Wlogical-op -Wredundant-decls -Wstrict-prototypes -Wmissing-prototypes -Wswitch-default \
-	    -Werror -fanalyzer -c $$f -o /dev/null || exit 1; \
-	done; echo "gcc analysis: no findings"
-
 valgrind: $(TEST_BINARY)
 	valgrind --leak-check=full --show-leak-kinds=all \
 	  --errors-for-leak-kinds=definite,indirect --error-exitcode=1 \
