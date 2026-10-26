@@ -5,6 +5,7 @@
 #include "blood.h"
 #include "users.h"
 #include "storage.h"
+#include "audit.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -13,9 +14,31 @@ static const char *const group_names[GROUP_COUNT] = {
     "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
 };
 
+static const char *active_username = "anonymous";
+
 static const char *group_name(int group)
 {
     return ((group >= 0) && (group < GROUP_COUNT)) ? group_names[group] : "?";
+}
+
+static void log_action_for(const char *actor, const char *action)
+{
+    if (audit_log_event(actor, action) == 0) {
+        fprintf(stderr, "WARNING: could not write %s\n", "audit.log");
+    }
+}
+
+static void log_action(const char *action)
+{
+    log_action_for(active_username, action);
+}
+
+static void log_action_id(const char *action, int id)
+{
+    char details[80];
+
+    (void)snprintf(details, sizeof(details), "%s (ID %d)", action, id);
+    log_action(details);
 }
 
 static const char *result_text(Result result)
@@ -105,8 +128,10 @@ static void add_donor_action(Database *db)
     if (result == RESULT_OK) {
         printf("Donor added. The donor's ID is %d.\n", new_id);
         save_or_warn(db);
+        log_action_id("donor added", new_id);
     } else {
         printf("Could not add the donor: %s.\n", result_text(result));
+        log_action("donor add failed");
     }
 }
 
@@ -122,8 +147,10 @@ static void deactivate_donor_action(Database *db)
     if (result == RESULT_OK) {
         printf("Donor %d is now deactivated.\n", id);
         save_or_warn(db);
+        log_action_id("donor deactivated", id);
     } else {
         printf("Could not deactivate: %s.\n", result_text(result));
+        log_action_id("donor deactivation failed", id);
     }
 }
 
@@ -147,8 +174,10 @@ static void delete_donor_action(Database *db)
     if (result == RESULT_OK) {
         printf("Donor %d was deleted.\n", id);
         save_or_warn(db);
+        log_action_id("donor deleted", id);
     } else {
         printf("Could not delete: %s.\n", result_text(result));
+        log_action_id("donor deletion failed", id);
     }
 }
 
@@ -169,12 +198,16 @@ static void donor_menu(Database *db)
         }
         switch (choice) {
         case 1: add_donor_action(db); break;
-        case 2: list_donors(db, -1); break;
+        case 2:
+            list_donors(db, -1);
+            log_action("donor list viewed");
+            break;
         case 3: {
             int group = 0;
 
             if (ask_group("Blood group to search for: ", &group) != 0) {
                 list_donors(db, group);
+                log_action("donors searched by blood group");
             }
             break;
         }
@@ -205,12 +238,14 @@ static void record_donation_action(Database *db)
     donor = find_donor(db, donor_id);
     if (donor == NULL) {
         printf("There is no donor with ID %d.\n", donor_id);
+        log_action_id("donation rejected for unknown donor", donor_id);
         return;
     }
     printf("Donor: %s, blood group %s.\n", donor->name, group_name(donor->group));
     problem = donor_problem(donor, today());
     if (problem != NULL) {
         printf("%s\n", problem);
+        log_action_id("donation rejected for donor eligibility", donor_id);
         return;
     }
     if (ask_number("Amount of blood in ml: ", MIN_DONATION_ML, MAX_DONATION_ML, &ml) == 0) {
@@ -221,8 +256,10 @@ static void record_donation_action(Database *db)
         printf("Donation saved as batch %d. It can be used after the blood tests are marked as done.\n",
                batch_id);
         save_or_warn(db);
+        log_action_id("donation recorded as batch", batch_id);
     } else {
         printf("Could not record the donation: %s.\n", result_text(result));
+        log_action_id("donation recording failed for donor", donor_id);
     }
 }
 
@@ -246,10 +283,14 @@ static void donation_menu(Database *db)
 
             if (ask_number("Donor ID: ", 1, 1000000, &donor_id) != 0) {
                 list_batches(db, donor_id, today());
+                log_action_id("donation history viewed for donor", donor_id);
             }
             break;
         }
-        case 3: list_batches(db, 0, today()); break;
+        case 3:
+            list_batches(db, 0, today());
+            log_action("donation list viewed");
+            break;
         default: break;
         }
     }
@@ -273,14 +314,17 @@ static void test_batch_action(const Database *db)
     }
     if (yes == 0) {
         printf("Cancelled. Use 'Discard a batch' if the blood must not be used.\n");
+        log_action_id("batch test cancelled", id);
         return;
     }
     result = update_batch(db, id, BATCH_TEST, today());
     if (result == RESULT_OK) {
         printf("Batch %d can now be used.\n", id);
         save_or_warn(db);
+        log_action_id("batch marked tested", id);
     } else {
         printf("Could not change the batch: %s.\n", result_text(result));
+        log_action_id("batch testing failed", id);
     }
 }
 
@@ -298,14 +342,17 @@ static void discard_batch_action(const Database *db)
     }
     if (yes == 0) {
         printf("Cancelled.\n");
+        log_action_id("batch discard cancelled", id);
         return;
     }
     result = update_batch(db, id, BATCH_DISCARD, today());
     if (result == RESULT_OK) {
         printf("Batch %d was discarded.\n", id);
         save_or_warn(db);
+        log_action_id("batch discarded", id);
     } else {
         printf("Could not discard: %s.\n", result_text(result));
+        log_action_id("batch discard failed", id);
     }
 }
 
@@ -325,16 +372,23 @@ static void inventory_menu(const Database *db)
             choice = 0;
         }
         switch (choice) {
-        case 1: show_stock(db, today()); break;
+        case 1:
+            show_stock(db, today());
+            log_action("full blood stock viewed");
+            break;
         case 2: {
             int group = 0;
 
             if (ask_group("Blood group: ", &group) != 0) {
                 printf("%s ready to use: %d ml\n", group_name(group), stock_for_group(db, group, today()));
+                log_action("blood stock checked by group");
             }
             break;
         }
-        case 3: list_batches(db, 0, today()); break;
+        case 3:
+            list_batches(db, 0, today());
+            log_action("batch list viewed");
+            break;
         case 4: test_batch_action(db); break;
         case 5: discard_batch_action(db); break;
         default: break;
@@ -369,8 +423,10 @@ static void new_request_action(Database *db)
         printf("Request %d saved. Ready to use now: %d ml of %s.\n", new_id,
                stock_for_group(db, group, today()), group_name(group));
         save_or_warn(db);
+        log_action_id("blood request created", new_id);
     } else {
         printf("Could not save the request: %s.\n", result_text(result));
+        log_action("blood request creation failed");
     }
 }
 
@@ -386,8 +442,10 @@ static void process_request_action(const Database *db)
     if (result == RESULT_OK) {
         printf("Request %d fulfilled. The blood was taken from the stock.\n", id);
         save_or_warn(db);
+        log_action_id("blood request fulfilled", id);
     } else {
         printf("Request %d was NOT fulfilled: %s.\n", id, result_text(result));
+        log_action_id("blood request fulfillment failed", id);
     }
 }
 
@@ -403,8 +461,10 @@ static void reject_request_action(const Database *db)
     if (result == RESULT_OK) {
         printf("Request %d rejected.\n", id);
         save_or_warn(db);
+        log_action_id("blood request rejected", id);
     } else {
         printf("Could not reject: %s.\n", result_text(result));
+        log_action_id("blood request rejection failed", id);
     }
 }
 
@@ -426,7 +486,10 @@ static void request_menu(Database *db)
         case 1: new_request_action(db); break;
         case 2: process_request_action(db); break;
         case 3: reject_request_action(db); break;
-        case 4: list_requests(db); break;
+        case 4:
+            list_requests(db);
+            log_action("request list viewed");
+            break;
         default: break;
         }
     }
@@ -470,9 +533,11 @@ static void add_user_action(Database *db)
         if (result == RESULT_OK) {
             printf("User %s created.\n", username);
             save_or_warn(db);
+            log_action("user account created");
         } else {
             printf("Could not create the user: %s (is the password strong enough?).\n",
                    result_text(result));
+            log_action("user account creation failed");
         }
     }
     wipe(password, (int)sizeof(password));
@@ -490,8 +555,10 @@ static void change_password_action(const Database *db, User *me)
             if (result == RESULT_OK) {
                 printf("Password changed.\n");
                 save_or_warn(db);
+                log_action("password changed");
             } else {
                 printf("Password NOT changed: wrong current password, or the new one is weak or the same.\n");
+                log_action("password change failed");
             }
         }
     }
@@ -534,8 +601,10 @@ static void first_run_setup(Database *db)
         if (result == RESULT_OK) {
             printf("User %s created.\n", username);
             save_or_warn(db);
+            log_action_for(username, "first user account created");
         } else {
             printf("Could not create the user: %s.\n", result_text(result));
+            log_action_for(username, "first user account creation failed");
         }
     }
     wipe(password, (int)sizeof(password));
@@ -557,8 +626,10 @@ static User *login(const Database *db)
                 user = authenticate_user(db, username, password);
                 if (user != NULL) {
                     printf("Welcome, %s!\n", username);
+                    log_action_for(username, "login successful");
                 } else {
                     printf("Wrong username or password.\n");
+                    log_action_for(username, "login failed");
                 }
             } else {
                 wipe(password, (int)sizeof(password));
@@ -602,6 +673,7 @@ static void main_menu(Database *db, User *me)
         }
     }
     printf("Goodbye!\n");
+    log_action("logout");
 }
 
 int main(void)
@@ -615,6 +687,7 @@ int main(void)
     } else {
         if (update_donor_statuses(&db, today()) > 0) {
             save_or_warn(&db);
+            log_action_for("system", "automatic donor status updates applied");
         }
         if (db.users == NULL) {
             first_run_setup(&db);
@@ -624,6 +697,7 @@ int main(void)
             me = login(&db);
         }
         if (me != NULL) {
+            active_username = me->username;
             main_menu(&db, me);
             exit_code = 0;
         }

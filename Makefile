@@ -20,7 +20,7 @@ test:
 	  $(CC) $(CFLAGS) -O0 -g $(COVERAGE_FLAGS) $$extra -c "$$source" -o $(TEST_BUILD)/$$name.o || exit 1; \
 	done
 	$(CXX) $(CXXFLAGS) $(COVERAGE_FLAGS) -o $(TEST_BUILD)/test_suite tests/test_*.cpp $(TEST_BUILD)/*.o \
-	  -lgtest_main -lgtest -lcrypto -pthread
+	  -Wl,--wrap=malloc -lgtest_main -lgtest -lcrypto -pthread
 	./$(TEST_BUILD)/test_suite
 
 coverage:

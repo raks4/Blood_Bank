@@ -13,9 +13,6 @@ static const char *const group_names[GROUP_COUNT] = {
     "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
 };
 
-/* Becomes 1 when keyboard input ends (Ctrl+D). */
-static int input_ended = 0;
-
 static char to_upper(char letter)
 {
     if ((letter >= 'a') && (letter <= 'z')) {
@@ -87,7 +84,7 @@ int read_input(const char *prompt, char *buffer, int size, int hidden)
         (void)fflush(stdout);
         if (fgets(buffer, size, stdin) == NULL) {
             buffer[0] = '\0';
-            input_ended = 1;
+            return 0;
         } else {
             int length = (int)strlen(buffer);
             if ((length > 0) && (buffer[length - 1] == '\n')) {
@@ -118,7 +115,6 @@ int read_input(const char *prompt, char *buffer, int size, int hidden)
     c = getchar();
     if (c == EOF) {
         ok = 0;
-        input_ended = 1;
     }
     while ((c != '\n') && (c != EOF)) {
         if (count < (size - 1)) {
@@ -205,13 +201,14 @@ static int ask_text(const char *prompt, char *buffer, int size)
 {
     int valid = 0;
 
-    while ((valid == 0) && (input_ended == 0)) {
-        if (read_line(prompt, buffer, size) != 0) {
-            trim(buffer);
-            valid = text_is_valid(buffer);
-            if ((valid == 0) && (input_ended == 0)) {
-                printf("Please use letters, numbers, spaces and . , - ' only.\n");
-            }
+    while (valid == 0) {
+        if (read_line(prompt, buffer, size) == 0) {
+            break;
+        }
+        trim(buffer);
+        valid = text_is_valid(buffer);
+        if (valid == 0) {
+            printf("Please use letters, numbers, spaces and . , - ' only.\n");
         }
     }
     return valid;
@@ -221,24 +218,25 @@ static int ask_phone(const char *prompt, char *buffer, int size)
 {
     int valid = 0;
 
-    while ((valid == 0) && (input_ended == 0)) {
-        if (read_line(prompt, buffer, size) != 0) {
-            int start = (buffer[0] == '+') ? 1 : 0;
-            int length = (int)strlen(buffer);
-            int i;
+    while (valid == 0) {
+        if (read_line(prompt, buffer, size) == 0) {
+            break;
+        }
+        int start = (buffer[0] == '+') ? 1 : 0;
+        int length = (int)strlen(buffer);
+        int i;
 
-            valid = 1;
-            if (((length - start) < 7) || ((length - start) > 15)) {
+        valid = 1;
+        if (((length - start) < 7) || ((length - start) > 15)) {
+            valid = 0;
+        }
+        for (i = start; i < length; i++) {
+            if ((buffer[i] < '0') || (buffer[i] > '9')) {
                 valid = 0;
             }
-            for (i = start; i < length; i++) {
-                if ((buffer[i] < '0') || (buffer[i] > '9')) {
-                    valid = 0;
-                }
-            }
-            if ((valid == 0) && (input_ended == 0)) {
-                printf("A phone number has 7 to 15 digits (it may start with +).\n");
-            }
+        }
+        if (valid == 0) {
+            printf("A phone number has 7 to 15 digits (it may start with +).\n");
         }
     }
     return valid;
@@ -250,17 +248,16 @@ static int ask_number(const char *prompt, int min, int max, int *value)
     int number = 0;
     char line[32];
 
-    while ((valid == 0) && (input_ended == 0)) {
-        if (read_line(prompt, line, (int)sizeof(line)) != 0) {
-            trim(line);
-            if ((parse_int(line, &number) != 0) && (number >= min) && (number <= max)) {
-                *value = number;
-                valid = 1;
-            } else if (input_ended == 0) {
-                printf("Please enter a whole number from %d to %d.\n", min, max);
-            } else {
-                /* input ended: the loop stops */
-            }
+    while (valid == 0) {
+        if (read_line(prompt, line, (int)sizeof(line)) == 0) {
+            break;
+        }
+        trim(line);
+        if ((parse_int(line, &number) != 0) && (number >= min) && (number <= max)) {
+            *value = number;
+            valid = 1;
+        } else {
+            printf("Please enter a whole number from %d to %d.\n", min, max);
         }
     }
     return valid;
@@ -271,14 +268,15 @@ static int ask_group(const char *prompt, int *group)
     int valid = 0;
     char line[16];
 
-    while ((valid == 0) && (input_ended == 0)) {
-        if (read_line(prompt, line, (int)sizeof(line)) != 0) {
-            trim(line);
-            *group = parse_group(line);
-            valid = (*group >= 0) ? 1 : 0;
-            if ((valid == 0) && (input_ended == 0)) {
-                printf("The blood groups are: A+ A- B+ B- AB+ AB- O+ O-\n");
-            }
+    while (valid == 0) {
+        if (read_line(prompt, line, (int)sizeof(line)) == 0) {
+            break;
+        }
+        trim(line);
+        *group = parse_group(line);
+        valid = (*group >= 0) ? 1 : 0;
+        if (valid == 0) {
+            printf("The blood groups are: A+ A- B+ B- AB+ AB- O+ O-\n");
         }
     }
     return valid;

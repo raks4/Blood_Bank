@@ -341,3 +341,81 @@ TEST(MainTests, RejectsDamagedDataBeforeLogin)
     EXPECT_EQ(result.exit_code, 1);
     EXPECT_EQ(result.output.find("please log in"), std::string::npos);
 }
+
+
+/* Each action should return safely when input ends unexpectedly. */
+TEST(MainTests, AddDonorHandlesEndOfInput)
+{
+    const AppResult result = run_app(setup_and_login + "1\n1\n");
+    EXPECT_EQ(result.exit_code, 0);
+}
+
+/* The first-run setup should stop safely if no username is entered. */
+TEST(MainTests, FirstRunSetupHandlesEndOfInput)
+{
+    const AppResult result = run_app("");
+
+    EXPECT_EQ(result.exit_code, 1);
+    EXPECT_NE(result.output.find("Welcome! No users exist yet"), std::string::npos);
+}
+
+TEST(MainTests, ActionsHandleEndOfInputAtEachPrompt)
+{
+    const std::string existing_donor = "1|Alice|1234567890|0|1995|1|0\n";
+    const std::string common = setup_and_login;
+    const std::string donor_menu = "1\n";
+    const std::string donation_menu = "2\n";
+    const std::string inventory_menu = "3\n";
+    const std::string request_menu = "4\n";
+    const std::string account_menu = "5\n";
+    const std::string cases[] = {
+        common + donor_menu + "1\nAlice\n",
+        common + donor_menu + "1\nAlice\n1234567890\n",
+        common + donor_menu + "1\nAlice\n1234567890\nA+\n",
+        common + donor_menu + "4\n",
+        common + donor_menu + "5\n1\n",
+        common + donation_menu + "1\n",
+        common + donation_menu + "1\n1\n",
+        common + inventory_menu + "4\n1\n",
+        common + inventory_menu + "5\n1\n",
+        common + request_menu + "1\nHospital\n",
+        common + request_menu + "1\nHospital\nO-\n",
+        common + request_menu + "2\n",
+        common + request_menu + "3\n",
+        common + account_menu + "1\nstaff\n",
+        common + account_menu + "1\n",
+        common + account_menu + "2\n",
+        std::string("admin\n") + "StrongPass123\n" + "StrongPass123\n",
+        std::string("admin\n") + "StrongPass123\n" + "StrongPass123\n" + "admin\n"
+    };
+
+    for (size_t index = 0U; index < (sizeof(cases) / sizeof(cases[0])); index++) {
+        const std::string &donor_data = (index == 6U) ? existing_donor : "";
+        const AppResult result = run_app(cases[index], donor_data);
+
+        EXPECT_EQ(result.exit_code, (index >= 16U) ? 1 : 0) << "case " << index;
+    }
+}
+
+TEST(MainTests, ReportsInvalidAndDuplicateAccountCreation)
+{
+    const AppResult invalid_password = run_app(
+        "admin\n"
+        "weak\n"
+        "weak\n");
+    EXPECT_EQ(invalid_password.exit_code, 1);
+    EXPECT_NE(invalid_password.output.find("Could not create the user: that value is not allowed"),
+              std::string::npos);
+
+    const AppResult duplicate_user = run_app(
+        setup_and_login +
+        "5\n"
+        "1\n"
+        "admin\n"
+        "StrongPass123\n"
+        "StrongPass123\n"
+        "0\n"
+        "0\n");
+    EXPECT_EQ(duplicate_user.exit_code, 0);
+    EXPECT_NE(duplicate_user.output.find("that already exists"), std::string::npos);
+}

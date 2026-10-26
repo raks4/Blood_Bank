@@ -15,7 +15,10 @@ hospital requests, and password-protected users.
     ./bloodbank
 
 Run it from the same folder every time: the data files are saved there (`donors.txt`, `batches.txt`,
-`requests.txt`, `users.txt`). The first time, it asks you to create the first user.
+`requests.txt`, `users.txt`). The first time, it asks you to create the first user. Actions are appended
+to `audit.log` with a local timestamp and the acting username. Login attempts, logout, account and
+password changes, donor/donation/inventory/request operations, and list or search views are recorded.
+Passwords and donor names or contact details are not written to the audit log.
 
 ## Tests and coverage
 Run the GoogleTest suite:
@@ -39,6 +42,7 @@ Every module has a header in `include/` (what it offers) and a source file in `s
 | `blood.h` | `blood.c` | Batches (one donation = one batch), stock per blood group, and requests. |
 | `users.h` | `users.c` | Login accounts. Passwords are stored only as a salted hash. |
 | `storage.h` | `storage.c` | Saving and loading the four text files. |
+| `audit.h` | `audit.c` | Timestamped audit events in `audit.log`. |
 | `utils.h` | `utils.c` | Safe keyboard input, dates, and small helpers. |
 | - | `main.c` | The menus and `main()`. |
 
