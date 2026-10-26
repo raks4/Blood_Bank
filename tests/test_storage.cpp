@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -15,6 +16,54 @@ extern "C" {
 #include "donors.h"
 #include "storage.h"
 #include "users.h"
+}
+
+static Donor *append_test_donor(Database *db, const Donor *source)
+{
+    Donor *node = static_cast<Donor *>(std::malloc(sizeof(Donor)));
+    if (node == nullptr) return nullptr;
+    *node = *source;
+    node->next = nullptr;
+    Donor **link = &db->donors;
+    while (*link != nullptr) link = &(*link)->next;
+    *link = node;
+    return node;
+}
+
+static Batch *append_test_batch(Database *db, const Batch *source)
+{
+    Batch *node = static_cast<Batch *>(std::malloc(sizeof(Batch)));
+    if (node == nullptr) return nullptr;
+    *node = *source;
+    node->next = nullptr;
+    Batch **link = &db->batches;
+    while (*link != nullptr) link = &(*link)->next;
+    *link = node;
+    return node;
+}
+
+static Request *append_test_request(Database *db, const Request *source)
+{
+    Request *node = static_cast<Request *>(std::malloc(sizeof(Request)));
+    if (node == nullptr) return nullptr;
+    *node = *source;
+    node->next = nullptr;
+    Request **link = &db->requests;
+    while (*link != nullptr) link = &(*link)->next;
+    *link = node;
+    return node;
+}
+
+static User *append_test_user(Database *db, const User *source)
+{
+    User *node = static_cast<User *>(std::malloc(sizeof(User)));
+    if (node == nullptr) return nullptr;
+    *node = *source;
+    node->next = nullptr;
+    User **link = &db->users;
+    while (*link != nullptr) link = &(*link)->next;
+    *link = node;
+    return node;
 }
 
 TEST(StorageTests, SavesLoadsAndRejectsDamagedData)
@@ -37,7 +86,7 @@ TEST(StorageTests, SavesLoadsAndRejectsDamagedData)
     donor.group = 2;
     donor.birth_year = 1990;
     donor.active = 1;
-    ASSERT_NE(append_donor(&db, &donor), nullptr);
+    ASSERT_NE(append_test_donor(&db, &donor), nullptr);
 
     Batch batch = {};
     batch.id = 1;
@@ -48,7 +97,7 @@ TEST(StorageTests, SavesLoadsAndRejectsDamagedData)
     batch.collected = 1000L;
     batch.expiry = 2000L;
     batch.status = BATCH_AVAILABLE;
-    ASSERT_NE(append_batch(&db, &batch), nullptr);
+    ASSERT_NE(append_test_batch(&db, &batch), nullptr);
 
     Request request = {};
     request.id = 1;
@@ -57,13 +106,13 @@ TEST(StorageTests, SavesLoadsAndRejectsDamagedData)
     request.ml = 100;
     request.date = 1500L;
     request.status = REQUEST_PENDING;
-    ASSERT_NE(append_request(&db, &request), nullptr);
+    ASSERT_NE(append_test_request(&db, &request), nullptr);
 
     User user = {};
     (void)std::strcpy(user.username, "staff");
     user.salt[0] = 10U;
     user.hash[0] = 20U;
-    ASSERT_NE(append_user(&db, &user), nullptr);
+    ASSERT_NE(append_test_user(&db, &user), nullptr);
     ASSERT_EQ(save_all(&db), 1);
 
     Database loaded = {};

@@ -9,6 +9,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -16,6 +17,129 @@
 #define BATCHES_FILE   "batches.txt"
 #define REQUESTS_FILE  "requests.txt"
 #define USERS_FILE     "users.txt"
+
+static int append_donor_record(Database *db, const Donor *source)
+{
+    Donor *node = malloc(sizeof(*node));
+    Donor **link = &db->donors;
+
+    if (node == NULL) {
+        return 0;
+    }
+    *node = *source;
+    node->next = NULL;
+    while (*link != NULL) {
+        link = &(*link)->next;
+    }
+    *link = node;
+    return 1;
+}
+
+static int append_batch_record(Database *db, const Batch *source)
+{
+    Batch *node = malloc(sizeof(*node));
+    Batch **link = &db->batches;
+
+    if (node == NULL) {
+        return 0;
+    }
+    *node = *source;
+    node->next = NULL;
+    while (*link != NULL) {
+        link = &(*link)->next;
+    }
+    *link = node;
+    return 1;
+}
+
+static int append_request_record(Database *db, const Request *source)
+{
+    Request *node = malloc(sizeof(*node));
+    Request **link = &db->requests;
+
+    if (node == NULL) {
+        return 0;
+    }
+    *node = *source;
+    node->next = NULL;
+    while (*link != NULL) {
+        link = &(*link)->next;
+    }
+    *link = node;
+    return 1;
+}
+
+static int append_user_record(Database *db, const User *source)
+{
+    User *node = malloc(sizeof(*node));
+    User **link = &db->users;
+
+    if (node == NULL) {
+        return 0;
+    }
+    *node = *source;
+    node->next = NULL;
+    while (*link != NULL) {
+        link = &(*link)->next;
+    }
+    *link = node;
+    return 1;
+}
+
+static int contains_batch(const Database *db, int id)
+{
+    const Batch *batch = db->batches;
+
+    while ((batch != NULL) && (batch->id != id)) {
+        batch = batch->next;
+    }
+    return (batch != NULL) ? 1 : 0;
+}
+
+static int contains_request(const Database *db, int id)
+{
+    const Request *request = db->requests;
+
+    while ((request != NULL) && (request->id != id)) {
+        request = request->next;
+    }
+    return (request != NULL) ? 1 : 0;
+}
+
+static int contains_user(const Database *db, const char *username)
+{
+    const User *user = db->users;
+
+    while ((user != NULL) && (strcmp(user->username, username) != 0)) {
+        user = user->next;
+    }
+    return (user != NULL) ? 1 : 0;
+}
+
+static int hex_to_bytes(const char *hex, unsigned char *bytes, int count)
+{
+    int ok = ((int)strlen(hex) == (count * 2)) ? 1 : 0;
+
+    for (int i = 0; (i < count) && (ok == 1); i++) {
+        int pair = 0;
+
+        for (int digit = 0; digit < 2; digit++) {
+            const char c = hex[(i * 2) + digit];
+            int value = -1;
+
+            if ((c >= '0') && (c <= '9')) {
+                value = c - '0';
+            } else if ((c >= 'a') && (c <= 'f')) {
+                value = (c - 'a') + 10;
+            } else {
+                ok = 0;
+            }
+            pair = (pair * 16) + value;
+        }
+        bytes[i] = (unsigned char)pair;
+    }
+    return ok;
+}
 
 /* ---------------------------------------------------------------- */
 /* Saving                                                            */
@@ -220,7 +344,7 @@ static int load_donors(Database *db)
             ok = 0;
         }
     } else {
-        Donor donor;
+        Donor donor = {0};
         int fields = read_donor(file, &donor);
 
         while (((fields == 7) || (fields == 9)) && (ok == 1)) {
@@ -230,7 +354,7 @@ static int load_donors(Database *db)
                 ((donor.active != 0) && (donor.deactivated_at != 0L)) ||
                 ((donor.active == 0) && (donor.deactivated_at == 0L))) {
                 ok = 0;
-            } else if (append_donor(db, &donor) == NULL) {
+            } else if (append_donor_record(db, &donor) == 0) {
                 ok = 0;
             } else {
                 fields = read_donor(file, &donor);
@@ -255,16 +379,16 @@ static int load_batches(Database *db)
             ok = 0;
         }
     } else {
-        Batch batch;
+        Batch batch = {0};
         int fields = read_batch(file, &batch);
 
         while ((fields == 8) && (ok == 1)) {
-            if ((batch.id < 1) || (find_batch(db, batch.id) != NULL) ||
+            if ((batch.id < 1) || (contains_batch(db, batch.id) != 0) ||
                 (group_is_valid(batch.group) == 0) || (batch.ml_left < 0) ||
                 (batch.ml_left > batch.ml_collected) || (batch.status < BATCH_WAITING) ||
                 (batch.status > BATCH_DISCARDED)) {
                 ok = 0;
-            } else if (append_batch(db, &batch) == NULL) {
+            } else if (append_batch_record(db, &batch) == 0) {
                 ok = 0;
             } else {
                 fields = read_batch(file, &batch);
@@ -289,15 +413,15 @@ static int load_requests(Database *db)
             ok = 0;
         }
     } else {
-        Request request;
+        Request request = {0};
         int fields = read_request(file, &request);
 
         while ((fields == 6) && (ok == 1)) {
-            if ((request.id < 1) || (find_request(db, request.id) != NULL) ||
+            if ((request.id < 1) || (contains_request(db, request.id) != 0) ||
                 (group_is_valid(request.group) == 0) || (request.status < REQUEST_PENDING) ||
                 (request.status > REQUEST_REJECTED)) {
                 ok = 0;
-            } else if (append_request(db, &request) == NULL) {
+            } else if (append_request_record(db, &request) == 0) {
                 ok = 0;
             } else {
                 fields = read_request(file, &request);
@@ -322,7 +446,7 @@ static int load_users(Database *db)
             ok = 0;
         }
     } else {
-        User user;
+        User user = {0};
         char salt_hex[SALT_SIZE * 2 + 1];
         char hash_hex[HASH_SIZE * 2 + 1];
         int fields = fscanf(file, "%19[^|]|%32[0-9a-f]|%64[0-9a-f]\n", user.username, salt_hex, hash_hex);
@@ -330,7 +454,8 @@ static int load_users(Database *db)
         while ((fields == 3) && (ok == 1)) {
             if ((hex_to_bytes(salt_hex, user.salt, SALT_SIZE) == 0) ||
                 (hex_to_bytes(hash_hex, user.hash, HASH_SIZE) == 0) ||
-                (find_user(db, user.username) != NULL) || (append_user(db, &user) == NULL)) {
+                (contains_user(db, user.username) != 0) ||
+                (append_user_record(db, &user) == 0)) {
                 ok = 0;
             } else {
                 fields = fscanf(file, "%19[^|]|%32[0-9a-f]|%64[0-9a-f]\n", user.username, salt_hex,

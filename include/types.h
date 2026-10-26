@@ -42,12 +42,35 @@ typedef enum {
     RESULT_FAILED
 } Result;
 
+typedef enum {
+    DONOR_DEACTIVATE,
+    DONOR_DELETE
+} DonorAction;
+
+typedef enum {
+    BATCH_TEST,
+    BATCH_DISCARD
+} BatchAction;
+
+typedef enum {
+    REQUEST_FULFILL,
+    REQUEST_REJECT
+} RequestAction;
+
+typedef enum {
+    INPUT_TEXT,
+    INPUT_PHONE,
+    INPUT_NUMBER,
+    INPUT_GROUP,
+    INPUT_YES
+} InputKind;
+
 /* ---------- The records. Each one is a node of a linked list. ---------- */
 typedef struct Donor {
     int id;
     char name[NAME_LEN];
     char phone[PHONE_LEN];
-    int group;                /* 0..7, see group_name() */
+    int group;                /* 0..7, in the order listed in the input prompt */
     int birth_year;
     int active;               /* 1 = active, 0 = deactivated */
     long last_donation;       /* seconds since 1970, 0 = never donated */

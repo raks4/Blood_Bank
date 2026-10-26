@@ -1,16 +1,48 @@
 /* blood.c - blood batches (donations), stock, and hospital requests. */
 #include "types.h"
-#include "utils.h"
 #include "blood.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+static const char *blood_group_name(int group)
+{
+    static const char *const names[GROUP_COUNT] = {
+        "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+    };
+
+    return ((group >= 0) && (group < GROUP_COUNT)) ? names[group] : "?";
+}
+
+static int copy_text(char *destination, int size, const char *source)
+{
+    int length = (int)strlen(source);
+
+    if (length >= size) {
+        return 0;
+    }
+    (void)memcpy(destination, source, (size_t)length + 1U);
+    return 1;
+}
+
+static void format_date(long when, char *buffer, int size)
+{
+    time_t moment = (time_t)when;
+    struct tm parts;
+
+    if ((localtime_r(&moment, &parts) == NULL) ||
+        (strftime(buffer, (size_t)size, "%Y-%m-%d", &parts) == 0U)) {
+        (void)snprintf(buffer, (size_t)size, "%s", "unknown");
+    }
+}
 
 /* ---------------------------------------------------------------- */
 /* Batches: one batch = one donation = one bag of blood              */
 /* ---------------------------------------------------------------- */
 
-Batch *find_batch(const Database *db, int id)
+static Batch *find_batch(const Database *db, int id)
 {
     Batch *current = db->batches;
 
@@ -34,7 +66,7 @@ static int next_batch_id(const Database *db)
     return highest + 1;
 }
 
-Batch *append_batch(Database *db, const Batch *source)
+static Batch *append_batch(Database *db, const Batch *source)
 {
     Batch *node = malloc(sizeof(Batch));
 
@@ -83,33 +115,28 @@ Result record_donation(Database *db, Donor *donor, int ml, long now, int *batch_
 }
 
 /* Called when the blood tests are fine: the batch becomes usable. */
-Result mark_batch_tested(const Database *db, int id, long now)
+Result update_batch(const Database *db, int id, BatchAction action, long now)
 {
     Result result = RESULT_OK;
     Batch *batch = find_batch(db, id);
 
     if (batch == NULL) {
         result = RESULT_NOT_FOUND;
-    } else if ((batch->status != BATCH_WAITING) || (batch->expiry < now)) {
-        result = RESULT_WRONG_STATE;
+    } else if (action == BATCH_TEST) {
+        if ((batch->status != BATCH_WAITING) || (batch->expiry < now)) {
+            result = RESULT_WRONG_STATE;
+        } else {
+            batch->status = BATCH_AVAILABLE;
+        }
+    } else if (action == BATCH_DISCARD) {
+        if (batch->status == BATCH_DISCARDED) {
+            result = RESULT_WRONG_STATE;
+        } else {
+            batch->status = BATCH_DISCARDED;
+            batch->ml_left = 0;
+        }
     } else {
-        batch->status = BATCH_AVAILABLE;
-    }
-    return result;
-}
-
-Result discard_batch(const Database *db, int id)
-{
-    Result result = RESULT_OK;
-    Batch *batch = find_batch(db, id);
-
-    if (batch == NULL) {
-        result = RESULT_NOT_FOUND;
-    } else if (batch->status == BATCH_DISCARDED) {
-        result = RESULT_WRONG_STATE;
-    } else {
-        batch->status = BATCH_DISCARDED;
-        batch->ml_left = 0;
+        result = RESULT_BAD_INPUT;
     }
     return result;
 }
@@ -189,7 +216,7 @@ void show_stock(const Database *db, long now)
             }
             current = current->next;
         }
-        printf("%-6s %-18d %-22d %s\n", group_name(group), ready, waiting,
+        printf("%-6s %-18d %-22d %s\n", blood_group_name(group), ready, waiting,
                (ready < LOW_STOCK_ML) ? "LOW STOCK" : "");
     }
 }
@@ -210,7 +237,7 @@ void list_batches(const Database *db, int donor_id, long now)
             format_date(current->collected, donated, (int)sizeof(donated));
             format_date(current->expiry, expires, (int)sizeof(expires));
             printf("%-5d %-6d %-6s %-9d %-8d %-11s %-11s %s\n", current->id, current->donor_id,
-                   group_name(current->group), current->ml_collected, current->ml_left, donated,
+                   blood_group_name(current->group), current->ml_collected, current->ml_left, donated,
                    expires, batch_status_text(current, now));
             shown++;
         }
@@ -223,7 +250,7 @@ void list_batches(const Database *db, int donor_id, long now)
 /* Requests from hospitals                                           */
 /* ---------------------------------------------------------------- */
 
-Request *find_request(const Database *db, int id)
+static Request *find_request(const Database *db, int id)
 {
     Request *current = db->requests;
 
@@ -247,7 +274,7 @@ static int next_request_id(const Database *db)
     return highest + 1;
 }
 
-Request *append_request(Database *db, const Request *source)
+static Request *append_request(Database *db, const Request *source)
 {
     Request *node = malloc(sizeof(Request));
 
@@ -291,18 +318,21 @@ Result add_request(Database *db, const char *hospital, int group, int ml, long n
 }
 
 /* Gives the blood to the hospital: takes it from the batches that expire first. */
-Result process_request(const Database *db, int id, long now)
+Result update_request(const Database *db, int id, RequestAction action, long now)
 {
     Result result = RESULT_OK;
     Request *request = find_request(db, id);
 
     if (request == NULL) {
         result = RESULT_NOT_FOUND;
+    } else if ((action != REQUEST_FULFILL) && (action != REQUEST_REJECT)) {
+        result = RESULT_BAD_INPUT;
     } else if (request->status != REQUEST_PENDING) {
         result = RESULT_WRONG_STATE;
-    } else if (stock_for_group(db, request->group, now) < request->ml) {
+    } else if ((action == REQUEST_FULFILL) &&
+               (stock_for_group(db, request->group, now) < request->ml)) {
         result = RESULT_NOT_ENOUGH_STOCK;
-    } else {
+    } else if (action == REQUEST_FULFILL) {
         int still_needed = request->ml;
 
         while (still_needed > 0) {
@@ -317,19 +347,6 @@ Result process_request(const Database *db, int id, long now)
             }
         }
         request->status = REQUEST_FULFILLED;
-    }
-    return result;
-}
-
-Result reject_request(const Database *db, int id)
-{
-    Result result = RESULT_OK;
-    Request *request = find_request(db, id);
-
-    if (request == NULL) {
-        result = RESULT_NOT_FOUND;
-    } else if (request->status != REQUEST_PENDING) {
-        result = RESULT_WRONG_STATE;
     } else {
         request->status = REQUEST_REJECTED;
     }
@@ -355,7 +372,7 @@ void list_requests(const Database *db)
             status = "pending";
         }
         printf("%-4d %-24s %-6s %-8d %-11s %s\n", current->id, current->hospital,
-               group_name(current->group), current->ml, date, status);
+               blood_group_name(current->group), current->ml, date, status);
         shown++;
         current = current->next;
     }

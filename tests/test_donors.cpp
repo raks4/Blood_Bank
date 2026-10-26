@@ -11,13 +11,45 @@ extern "C" {
 #include "utils.h"
 }
 
+static Donor *append_test_donor(Database *db, const Donor *source)
+{
+    Donor *node = static_cast<Donor *>(std::malloc(sizeof(Donor)));
+    if (node == nullptr) {
+        return nullptr;
+    }
+    *node = *source;
+    node->next = nullptr;
+    Donor **link = &db->donors;
+    while (*link != nullptr) {
+        link = &(*link)->next;
+    }
+    *link = node;
+    return node;
+}
+
+static Batch *append_test_batch(Database *db, const Batch *source)
+{
+    Batch *node = static_cast<Batch *>(std::malloc(sizeof(Batch)));
+    if (node == nullptr) {
+        return nullptr;
+    }
+    *node = *source;
+    node->next = nullptr;
+    Batch **link = &db->batches;
+    while (*link != nullptr) {
+        link = &(*link)->next;
+    }
+    *link = node;
+    return node;
+}
+
 TEST(DonorTests, DonorLifecycleAndEligibility)
 {
     Database db = {};
     Donor source = {};
     source.id = 8;
     (void)std::strcpy(source.name, "Existing");
-    ASSERT_NE(append_donor(&db, &source), nullptr);
+    ASSERT_NE(append_test_donor(&db, &source), nullptr);
 
     int id = 0;
     EXPECT_EQ(add_donor(&db, "John Smith", "9876543210", 0,
@@ -39,10 +71,10 @@ TEST(DonorTests, DonorLifecycleAndEligibility)
     donor->last_donation = 1000000L;
     EXPECT_NE(donor_problem(donor, 1000001L), nullptr);
     donor->last_donation = 0L;
-    EXPECT_EQ(deactivate_donor(&db, id), RESULT_OK);
+    EXPECT_EQ(update_donor(&db, id, DONOR_DEACTIVATE), RESULT_OK);
     EXPECT_STREQ(donor_problem(donor, 1000000L), "This donor is deactivated.");
-    EXPECT_EQ(deactivate_donor(&db, id), RESULT_WRONG_STATE);
-    EXPECT_EQ(deactivate_donor(&db, 99), RESULT_NOT_FOUND);
+    EXPECT_EQ(update_donor(&db, id, DONOR_DEACTIVATE), RESULT_WRONG_STATE);
+    EXPECT_EQ(update_donor(&db, 99, DONOR_DEACTIVATE), RESULT_NOT_FOUND);
 
     while (db.donors != nullptr) {
         Donor *next = db.donors->next;
@@ -62,24 +94,24 @@ TEST(DonorTests, InactivityDeactivatesAndDeletesOnTheConfiguredSchedule)
     active.id = 1;
     active.active = 1;
     active.registered_at = now - six_months;
-    ASSERT_NE(append_donor(&db, &active), nullptr);
+    ASSERT_NE(append_test_donor(&db, &active), nullptr);
 
     Donor recently_inactive = {};
     recently_inactive.id = 2;
     recently_inactive.deactivated_at = now - one_month + 1L;
-    ASSERT_NE(append_donor(&db, &recently_inactive), nullptr);
+    ASSERT_NE(append_test_donor(&db, &recently_inactive), nullptr);
 
     Donor recently_active = {};
     recently_active.id = 4;
     recently_active.active = 1;
     recently_active.registered_at = now - six_months;
     recently_active.last_donation = now - SECONDS_PER_DAY;
-    ASSERT_NE(append_donor(&db, &recently_active), nullptr);
+    ASSERT_NE(append_test_donor(&db, &recently_active), nullptr);
 
     Donor due_for_deletion = {};
     due_for_deletion.id = 3;
     due_for_deletion.deactivated_at = now - one_month;
-    ASSERT_NE(append_donor(&db, &due_for_deletion), nullptr);
+    ASSERT_NE(append_test_donor(&db, &due_for_deletion), nullptr);
 
     EXPECT_EQ(update_donor_statuses(&db, now), 2);
     ASSERT_NE(find_donor(&db, 1), nullptr);
@@ -90,15 +122,15 @@ TEST(DonorTests, InactivityDeactivatesAndDeletesOnTheConfiguredSchedule)
     EXPECT_EQ(find_donor(&db, 4)->active, 1);
     EXPECT_EQ(find_donor(&db, 3), nullptr);
 
-    EXPECT_EQ(delete_donor(&db, 2), RESULT_OK);
-    EXPECT_EQ(delete_donor(&db, 2), RESULT_NOT_FOUND);
-    EXPECT_EQ(delete_donor(&db, 1), RESULT_OK);
-    EXPECT_EQ(delete_donor(&db, 4), RESULT_OK);
+    EXPECT_EQ(update_donor(&db, 2, DONOR_DELETE), RESULT_OK);
+    EXPECT_EQ(update_donor(&db, 2, DONOR_DELETE), RESULT_NOT_FOUND);
+    EXPECT_EQ(update_donor(&db, 1, DONOR_DELETE), RESULT_OK);
+    EXPECT_EQ(update_donor(&db, 4, DONOR_DELETE), RESULT_OK);
     EXPECT_EQ(db.donors, nullptr);
 
     Batch history = {};
     history.donor_id = 9;
-    ASSERT_NE(append_batch(&db, &history), nullptr);
+    ASSERT_NE(append_test_batch(&db, &history), nullptr);
     int next_id = 0;
     EXPECT_EQ(add_donor(&db, "Next Donor", "1234567890", 0,
                         current_year() - 25, &next_id), RESULT_OK);

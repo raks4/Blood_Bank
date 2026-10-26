@@ -12,7 +12,18 @@
 
 #define HASH_ROUNDS 600000      /* slow on purpose, so guessing passwords is slow */
 
-User *find_user(const Database *db, const char *username)
+static int copy_text(char *destination, int size, const char *source)
+{
+    int length = (int)strlen(source);
+
+    if (length >= size) {
+        return 0;
+    }
+    (void)memcpy(destination, source, (size_t)length + 1U);
+    return 1;
+}
+
+static User *find_user(const Database *db, const char *username)
 {
     User *current = db->users;
 
@@ -22,7 +33,7 @@ User *find_user(const Database *db, const char *username)
     return current;
 }
 
-User *append_user(Database *db, const User *source)
+static User *append_user(Database *db, const User *source)
 {
     User *node = malloc(sizeof(User));
 
@@ -73,6 +84,27 @@ static int make_hash(const char *password, const unsigned char *salt, unsigned c
     return (result == 1) ? 1 : 0;
 }
 
+static int check_password(const User *user, const char *password)
+{
+    unsigned char hash[HASH_SIZE];
+    int correct = 0;
+
+    if (make_hash(password, user->salt, hash) != 0) {
+        correct = (CRYPTO_memcmp(hash, user->hash, HASH_SIZE) == 0) ? 1 : 0;
+    }
+    return correct;
+}
+
+User *authenticate_user(const Database *db, const char *username, const char *password)
+{
+    User *user = find_user(db, username);
+
+    if ((user != NULL) && (check_password(user, password) == 0)) {
+        user = NULL;
+    }
+    return user;
+}
+
 Result create_user(Database *db, const char *username, const char *password)
 {
     Result result = RESULT_OK;
@@ -92,18 +124,6 @@ Result create_user(Database *db, const char *username, const char *password)
         result = RESULT_OK;
     }
     return result;
-}
-
-/* Returns 1 if the password is right. */
-int check_password(const User *user, const char *password)
-{
-    unsigned char hash[HASH_SIZE];
-    int correct = 0;
-
-    if (make_hash(password, user->salt, hash) != 0) {
-        correct = (CRYPTO_memcmp(hash, user->hash, HASH_SIZE) == 0) ? 1 : 0;
-    }
-    return correct;
 }
 
 Result change_password(User *user, const char *old_password, const char *new_password)

@@ -9,6 +9,64 @@
 #include <stdio.h>
 #include <string.h>
 
+static const char *const group_names[GROUP_COUNT] = {
+    "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+};
+
+static const char *group_name(int group)
+{
+    return ((group >= 0) && (group < GROUP_COUNT)) ? group_names[group] : "?";
+}
+
+static const char *result_text(Result result)
+{
+    switch (result) {
+    case RESULT_OK: return "done";
+    case RESULT_NOT_FOUND: return "no record with that ID";
+    case RESULT_EXISTS: return "that already exists";
+    case RESULT_BAD_INPUT: return "that value is not allowed";
+    case RESULT_WRONG_STATE: return "not possible in the current state";
+    case RESULT_NOT_ENOUGH_STOCK: return "not enough blood in stock";
+    case RESULT_NO_MEMORY: return "out of memory";
+    case RESULT_FAILED: return "internal error";
+    default: return "unknown problem";
+    }
+}
+
+static void wipe(char *buffer, int size)
+{
+    volatile char *p = buffer;
+
+    for (int i = 0; i < size; i++) {
+        p[i] = '\0';
+    }
+}
+
+static int ask_text(const char *prompt, char *buffer, int size)
+{
+    return ask_input(prompt, INPUT_TEXT, buffer, size, NULL, 0, 0);
+}
+
+static int ask_phone(const char *prompt, char *buffer, int size)
+{
+    return ask_input(prompt, INPUT_PHONE, buffer, size, NULL, 0, 0);
+}
+
+static int ask_number(const char *prompt, int min, int max, int *number)
+{
+    return ask_input(prompt, INPUT_NUMBER, NULL, 0, number, min, max);
+}
+
+static int ask_group(const char *prompt, int *group)
+{
+    return ask_input(prompt, INPUT_GROUP, NULL, 0, group, 0, 0);
+}
+
+static int ask_yes(const char *prompt, int *yes)
+{
+    return ask_input(prompt, INPUT_YES, NULL, 0, yes, 0, 0);
+}
+
 /* Saves after every change, so nothing is lost if the program stops suddenly. */
 static void save_or_warn(const Database *db)
 {
@@ -52,7 +110,7 @@ static void add_donor_action(Database *db)
     }
 }
 
-static void deactivate_donor_action(const Database *db)
+static void deactivate_donor_action(Database *db)
 {
     int id = 0;
     Result result;
@@ -60,7 +118,7 @@ static void deactivate_donor_action(const Database *db)
     if (ask_number("ID of the donor to deactivate: ", 1, 1000000, &id) == 0) {
         return;
     }
-    result = deactivate_donor(db, id);
+    result = update_donor(db, id, DONOR_DEACTIVATE);
     if (result == RESULT_OK) {
         printf("Donor %d is now deactivated.\n", id);
         save_or_warn(db);
@@ -85,7 +143,7 @@ static void delete_donor_action(Database *db)
         printf("Cancelled.\n");
         return;
     }
-    result = delete_donor(db, id);
+    result = update_donor(db, id, DONOR_DELETE);
     if (result == RESULT_OK) {
         printf("Donor %d was deleted.\n", id);
         save_or_warn(db);
@@ -98,7 +156,7 @@ static void donor_menu(Database *db)
 {
     int choice = -1;
 
-    while ((choice != 0) && (input_closed() == 0)) {
+    while (choice != 0) {
         printf("\n=== DONORS ===\n");
         printf("1) Add a donor\n");
         printf("2) List all donors\n");
@@ -172,7 +230,7 @@ static void donation_menu(Database *db)
 {
     int choice = -1;
 
-    while ((choice != 0) && (input_closed() == 0)) {
+    while (choice != 0) {
         printf("\n=== DONATIONS ===\n");
         printf("1) Record a donation\n");
         printf("2) Donation history of one donor\n");
@@ -217,7 +275,7 @@ static void test_batch_action(const Database *db)
         printf("Cancelled. Use 'Discard a batch' if the blood must not be used.\n");
         return;
     }
-    result = mark_batch_tested(db, id, today());
+    result = update_batch(db, id, BATCH_TEST, today());
     if (result == RESULT_OK) {
         printf("Batch %d can now be used.\n", id);
         save_or_warn(db);
@@ -242,7 +300,7 @@ static void discard_batch_action(const Database *db)
         printf("Cancelled.\n");
         return;
     }
-    result = discard_batch(db, id);
+    result = update_batch(db, id, BATCH_DISCARD, today());
     if (result == RESULT_OK) {
         printf("Batch %d was discarded.\n", id);
         save_or_warn(db);
@@ -255,7 +313,7 @@ static void inventory_menu(const Database *db)
 {
     int choice = -1;
 
-    while ((choice != 0) && (input_closed() == 0)) {
+    while (choice != 0) {
         printf("\n=== INVENTORY ===\n");
         printf("1) Stock of every blood group\n");
         printf("2) Check one blood group\n");
@@ -324,7 +382,7 @@ static void process_request_action(const Database *db)
     if (ask_number("Request ID to fulfil: ", 1, 1000000, &id) == 0) {
         return;
     }
-    result = process_request(db, id, today());
+    result = update_request(db, id, REQUEST_FULFILL, today());
     if (result == RESULT_OK) {
         printf("Request %d fulfilled. The blood was taken from the stock.\n", id);
         save_or_warn(db);
@@ -341,7 +399,7 @@ static void reject_request_action(const Database *db)
     if (ask_number("Request ID to reject: ", 1, 1000000, &id) == 0) {
         return;
     }
-    result = reject_request(db, id);
+    result = update_request(db, id, REQUEST_REJECT, today());
     if (result == RESULT_OK) {
         printf("Request %d rejected.\n", id);
         save_or_warn(db);
@@ -354,7 +412,7 @@ static void request_menu(Database *db)
 {
     int choice = -1;
 
-    while ((choice != 0) && (input_closed() == 0)) {
+    while (choice != 0) {
         printf("\n=== BLOOD REQUESTS ===\n");
         printf("1) New request\n");
         printf("2) Fulfil a request (give the blood)\n");
@@ -385,8 +443,8 @@ static int ask_new_password(char *password, int size)
     int ok = 0;
 
     printf("A password needs at least 8 characters, with a letter and a digit.\n");
-    if (read_password("New password: ", password, size) != 0) {
-        if (read_password("Repeat the password: ", again, (int)sizeof(again)) != 0) {
+    if (read_input("New password: ", password, size, 1) != 0) {
+        if (read_input("Repeat the password: ", again, (int)sizeof(again), 1) != 0) {
             if (strcmp(password, again) == 0) {
                 ok = 1;
             } else {
@@ -426,7 +484,7 @@ static void change_password_action(const Database *db, User *me)
     char new_password[PASSWORD_LEN];
 
     printf("\n--- Change my password ---\n");
-    if (read_password("Current password: ", old_password, (int)sizeof(old_password)) != 0) {
+    if (read_input("Current password: ", old_password, (int)sizeof(old_password), 1) != 0) {
         if (ask_new_password(new_password, (int)sizeof(new_password)) != 0) {
             Result result = change_password(me, old_password, new_password);
             if (result == RESULT_OK) {
@@ -445,7 +503,7 @@ static void account_menu(Database *db, User *me)
 {
     int choice = -1;
 
-    while ((choice != 0) && (input_closed() == 0)) {
+    while (choice != 0) {
         printf("\n=== ACCOUNTS ===\n");
         printf("1) Add a user\n");
         printf("2) Change my password\n");
@@ -489,23 +547,26 @@ static User *login(const Database *db)
     User *user = NULL;
     int attempt = 0;
 
-    while ((attempt < MAX_LOGIN_ATTEMPTS) && (user == NULL) && (input_closed() == 0)) {
+    while ((attempt < MAX_LOGIN_ATTEMPTS) && (user == NULL)) {
         char username[USERNAME_LEN];
 
-        if (read_line("Username: ", username, (int)sizeof(username)) != 0) {
+        if (read_input("Username: ", username, (int)sizeof(username), 0) != 0) {
             char password[PASSWORD_LEN];
 
-            if (read_password("Password: ", password, (int)sizeof(password)) != 0) {
-                User *found = find_user(db, username);
-
-                if ((found != NULL) && (check_password(found, password) != 0)) {
-                    user = found;
+            if (read_input("Password: ", password, (int)sizeof(password), 1) != 0) {
+                user = authenticate_user(db, username, password);
+                if (user != NULL) {
                     printf("Welcome, %s!\n", username);
                 } else {
                     printf("Wrong username or password.\n");
                 }
+            } else {
+                wipe(password, (int)sizeof(password));
+                break;
             }
             wipe(password, (int)sizeof(password));
+        } else {
+            break;
         }
         attempt++;
     }
@@ -520,7 +581,7 @@ static void main_menu(Database *db, User *me)
 {
     int choice = -1;
 
-    while ((choice != 0) && (input_closed() == 0)) {
+    while (choice != 0) {
         printf("\n===== BLOOD BANK =====\n");
         printf("1) Donors\n");
         printf("2) Donations\n");

@@ -5,6 +5,27 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+static const char *donor_group_name(int group)
+{
+    static const char *const names[GROUP_COUNT] = {
+        "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+    };
+
+    return ((group >= 0) && (group < GROUP_COUNT)) ? names[group] : "?";
+}
+
+static int copy_text(char *destination, int size, const char *source)
+{
+    int length = (int)strlen(source);
+
+    if (length >= size) {
+        return 0;
+    }
+    (void)memcpy(destination, source, (size_t)length + 1U);
+    return 1;
+}
 
 /* Walks along the list until it finds the donor with this ID. */
 Donor *find_donor(const Database *db, int id)
@@ -39,7 +60,7 @@ static int next_donor_id(const Database *db)
 }
 
 /* Makes a copy of a donor and adds it to the END of the list. */
-Donor *append_donor(Database *db, const Donor *source)
+static Donor *append_donor(Database *db, const Donor *source)
 {
     Donor *node = malloc(sizeof(Donor));
 
@@ -86,36 +107,34 @@ Result add_donor(Database *db, const char *name, const char *phone, int group,
     return result;
 }
 
-Result deactivate_donor(const Database *db, int id)
+Result update_donor(Database *db, int id, DonorAction action)
 {
     Result result = RESULT_OK;
     Donor *donor = find_donor(db, id);
 
     if (donor == NULL) {
         result = RESULT_NOT_FOUND;
-    } else if (donor->active == 0) {
-        result = RESULT_WRONG_STATE;
+    } else if (action == DONOR_DELETE) {
+        Donor **link = &db->donors;
+
+        while ((*link != NULL) && ((*link)->id != id)) {
+            link = &(*link)->next;
+        }
+        if (*link != NULL) {
+            Donor *removed = *link;
+
+            *link = removed->next;
+            free(removed);
+        }
+    } else if (action == DONOR_DEACTIVATE) {
+        if (donor->active == 0) {
+            result = RESULT_WRONG_STATE;
+        } else {
+            donor->active = 0;
+            donor->deactivated_at = today();
+        }
     } else {
-        donor->active = 0;
-        donor->deactivated_at = today();
-    }
-    return result;
-}
-
-Result delete_donor(Database *db, int id)
-{
-    Donor **link = &db->donors;
-    Result result = RESULT_NOT_FOUND;
-
-    while ((*link != NULL) && ((*link)->id != id)) {
-        link = &(*link)->next;
-    }
-    if (*link != NULL) {
-        Donor *removed = *link;
-
-        *link = removed->next;
-        free(removed);
-        result = RESULT_OK;
+        result = RESULT_BAD_INPUT;
     }
     return result;
 }
@@ -184,7 +203,7 @@ void list_donors(const Database *db, int group)
     while (current != NULL) {
         if ((group < 0) || (current->group == group)) {
             printf("%-4d %-24s %-17s %-6s %-6d %s\n", current->id, current->name, current->phone,
-                   group_name(current->group), current->birth_year,
+                   donor_group_name(current->group), current->birth_year,
                    (current->active != 0) ? "active" : "deactivated");
             shown++;
         }

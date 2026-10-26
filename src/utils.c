@@ -13,23 +13,8 @@ static const char *const group_names[GROUP_COUNT] = {
     "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
 };
 
-/* Becomes 1 when the keyboard input ends (Ctrl+D). Loops check it so they stop. */
+/* Becomes 1 when keyboard input ends (Ctrl+D). */
 static int input_ended = 0;
-
-int input_closed(void)
-{
-    return input_ended;
-}
-
-const char *group_name(int group)
-{
-    const char *name = "?";
-
-    if ((group >= 0) && (group < GROUP_COUNT)) {
-        name = group_names[group];
-    }
-    return name;
-}
 
 static char to_upper(char letter)
 {
@@ -57,29 +42,6 @@ static int parse_group(const char *text)
         }
     }
     return found;
-}
-
-/* Copies text only if it fits (including the final '\0'). Returns 1 if it fitted. */
-int copy_text(char *destination, int size, const char *source)
-{
-    int fits = 0;
-    int length = (int)strlen(source);
-
-    if (length < size) {
-        (void)memcpy(destination, source, (size_t)length + 1U);
-        fits = 1;
-    }
-    return fits;
-}
-
-/* Overwrites a buffer with zeros (used for passwords). */
-void wipe(char *buffer, int size)
-{
-    volatile char *p = buffer;
-
-    for (int i = 0; i < size; i++) {
-        p[i] = '\0';
-    }
 }
 
 /* ---------------------------------------------------------------- */
@@ -115,36 +77,30 @@ static void trim(char *text)
     }
 }
 
-/* Shows the prompt and reads one line. Returns 0 only when the input has ended.
-   A line that is too long for the buffer is thrown away and returned as empty. */
-int read_line(const char *prompt, char *buffer, int size)
+/* Reads a line, optionally hiding it when the input is a terminal. */
+int read_input(const char *prompt, char *buffer, int size, int hidden)
 {
-    int ok = 0;
+    if (hidden == 0) {
+        int ok = 0;
 
-    printf("%s", prompt);
-    (void)fflush(stdout);
-    if (fgets(buffer, size, stdin) == NULL) {
-        buffer[0] = '\0';
-        input_ended = 1;
-    } else {
-        int length = (int)strlen(buffer);
-        if ((length > 0) && (buffer[length - 1] == '\n')) {
-            buffer[length - 1] = '\0';
-        } else if (feof(stdin) == 0) {
-            throw_away_rest_of_line();
+        printf("%s", prompt);
+        (void)fflush(stdout);
+        if (fgets(buffer, size, stdin) == NULL) {
             buffer[0] = '\0';
-            printf("That was too long.\n");
+            input_ended = 1;
         } else {
-            /* last line of the input had no newline: keep it */
+            int length = (int)strlen(buffer);
+            if ((length > 0) && (buffer[length - 1] == '\n')) {
+                buffer[length - 1] = '\0';
+            } else if (feof(stdin) == 0) {
+                throw_away_rest_of_line();
+                buffer[0] = '\0';
+                printf("That was too long.\n");
+            }
+            ok = 1;
         }
-        ok = 1;
+        return ok;
     }
-    return ok;
-}
-
-/* Reads a password without showing it on the screen. */
-int read_password(const char *prompt, char *buffer, int size)
-{
     struct termios old_settings;
     struct termios hidden_settings;
     int is_terminal = (tcgetattr(STDIN_FILENO, &old_settings) == 0);
@@ -177,6 +133,11 @@ int read_password(const char *prompt, char *buffer, int size)
         printf("\n");
     }
     return ok;
+}
+
+static int read_line(const char *prompt, char *buffer, int size)
+{
+    return read_input(prompt, buffer, size, 0);
 }
 
 /* Converts text like "-25" into a number. Returns 0 if it is not a whole number. */
@@ -240,7 +201,7 @@ static int text_is_valid(const char *text)
 
 /* The ask_... functions keep asking until the answer is valid.
    They return 0 only when the input has ended. */
-int ask_text(const char *prompt, char *buffer, int size)
+static int ask_text(const char *prompt, char *buffer, int size)
 {
     int valid = 0;
 
@@ -256,7 +217,7 @@ int ask_text(const char *prompt, char *buffer, int size)
     return valid;
 }
 
-int ask_phone(const char *prompt, char *buffer, int size)
+static int ask_phone(const char *prompt, char *buffer, int size)
 {
     int valid = 0;
 
@@ -283,7 +244,7 @@ int ask_phone(const char *prompt, char *buffer, int size)
     return valid;
 }
 
-int ask_number(const char *prompt, int min, int max, int *value)
+static int ask_number(const char *prompt, int min, int max, int *value)
 {
     int valid = 0;
     int number = 0;
@@ -305,7 +266,7 @@ int ask_number(const char *prompt, int min, int max, int *value)
     return valid;
 }
 
-int ask_group(const char *prompt, int *group)
+static int ask_group(const char *prompt, int *group)
 {
     int valid = 0;
     char line[16];
@@ -324,13 +285,32 @@ int ask_group(const char *prompt, int *group)
 }
 
 /* Asks a yes/no question. *yes becomes 1 only if the answer starts with y or Y. */
-int ask_yes(const char *prompt, int *yes)
+static int ask_yes(const char *prompt, int *yes)
 {
     char line[16];
     int ok = read_line(prompt, line, (int)sizeof(line));
 
     *yes = ((ok != 0) && ((line[0] == 'y') || (line[0] == 'Y'))) ? 1 : 0;
     return ok;
+}
+
+int ask_input(const char *prompt, InputKind kind, char *text, int size,
+              int *number, int min, int max)
+{
+    switch (kind) {
+    case INPUT_TEXT:
+        return ask_text(prompt, text, size);
+    case INPUT_PHONE:
+        return ask_phone(prompt, text, size);
+    case INPUT_NUMBER:
+        return ask_number(prompt, min, max, number);
+    case INPUT_GROUP:
+        return ask_group(prompt, number);
+    case INPUT_YES:
+        return ask_yes(prompt, number);
+    default:
+        return 0;
+    }
 }
 
 /* ---------------------------------------------------------------- */
@@ -352,62 +332,4 @@ int current_year(void)
         year = parts.tm_year + 1900;
     }
     return year;
-}
-
-/* Writes a date like 2026-06-15 into the buffer (it needs at least 11 characters). */
-void format_date(long when, char *buffer, int size)
-{
-    time_t moment = (time_t)when;
-    struct tm parts;
-
-    if ((localtime_r(&moment, &parts) == NULL) ||
-        (strftime(buffer, (size_t)size, "%Y-%m-%d", &parts) == 0U)) {
-        (void)copy_text(buffer, size, "unknown");
-    }
-}
-
-/* Turns text like "0aff" into bytes. Used when reading passwords' hashes from a file. */
-int hex_to_bytes(const char *hex, unsigned char *bytes, int count)
-{
-    int ok = ((int)strlen(hex) == (count * 2)) ? 1 : 0;
-    int i;
-
-    for (i = 0; (i < count) && (ok == 1); i++) {
-        int pair = 0;
-        int digit;
-
-        for (digit = 0; digit < 2; digit++) {
-            char c = hex[(i * 2) + digit];
-            int value = -1;
-
-            if ((c >= '0') && (c <= '9')) {
-                value = c - '0';
-            } else if ((c >= 'a') && (c <= 'f')) {
-                value = (c - 'a') + 10;
-            } else {
-                ok = 0;
-            }
-            pair = (pair * 16) + value;
-        }
-        bytes[i] = (unsigned char)pair;
-    }
-    return ok;
-}
-
-const char *result_text(Result result)
-{
-    const char *text = "unknown problem";
-
-    switch (result) {
-    case RESULT_OK:               text = "done"; break;
-    case RESULT_NOT_FOUND:        text = "no record with that ID"; break;
-    case RESULT_EXISTS:           text = "that already exists"; break;
-    case RESULT_BAD_INPUT:        text = "that value is not allowed"; break;
-    case RESULT_WRONG_STATE:      text = "not possible in the current state"; break;
-    case RESULT_NOT_ENOUGH_STOCK: text = "not enough blood in stock"; break;
-    case RESULT_NO_MEMORY:        text = "out of memory"; break;
-    case RESULT_FAILED:           text = "internal error"; break;
-    default:                      break;
-    }
-    return text;
 }

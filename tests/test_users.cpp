@@ -11,17 +11,11 @@ extern "C" {
 TEST(UserTests, AccountCreationLookupAndPasswordChange)
 {
     Database db = {};
-    User source = {};
-    (void)std::strcpy(source.username, "existing");
-    ASSERT_NE(append_user(&db, &source), nullptr);
-
-    User second = {};
-    (void)std::strcpy(second.username, "staff");
-    User *appended = append_user(&db, &second);
-    ASSERT_NE(appended, nullptr);
-    EXPECT_EQ(db.users->next, appended);
-    EXPECT_EQ(find_user(&db, "missing"), nullptr);
-    EXPECT_STREQ(find_user(&db, "staff")->username, "staff");
+    ASSERT_EQ(create_user(&db, "existing", "ExistingPass123"), RESULT_OK);
+    ASSERT_EQ(create_user(&db, "staff", "StaffPass123"), RESULT_OK);
+    ASSERT_NE(db.users->next, nullptr);
+    EXPECT_EQ(authenticate_user(&db, "missing", "UnknownPass123"), nullptr);
+    EXPECT_STREQ(authenticate_user(&db, "staff", "StaffPass123")->username, "staff");
 
     EXPECT_EQ(create_user(&db, "weak", "short"), RESULT_BAD_INPUT);
     char long_name[USERNAME_LEN + 1];
@@ -31,14 +25,13 @@ TEST(UserTests, AccountCreationLookupAndPasswordChange)
     EXPECT_EQ(create_user(&db, "admin", "StrongPass123"), RESULT_OK);
     EXPECT_EQ(create_user(&db, "admin", "StrongPass123"), RESULT_EXISTS);
 
-    User *admin = find_user(&db, "admin");
+    User *admin = authenticate_user(&db, "admin", "StrongPass123");
     ASSERT_NE(admin, nullptr);
-    EXPECT_EQ(check_password(admin, "StrongPass123"), 1);
-    EXPECT_EQ(check_password(admin, "WrongPass123"), 0);
+    EXPECT_EQ(authenticate_user(&db, "admin", "WrongPass123"), nullptr);
     EXPECT_EQ(change_password(admin, "WrongPass123", "NewStrongPass456"), RESULT_BAD_INPUT);
     EXPECT_EQ(change_password(admin, "StrongPass123", "StrongPass123"), RESULT_BAD_INPUT);
     EXPECT_EQ(change_password(admin, "StrongPass123", "NewStrongPass456"), RESULT_OK);
-    EXPECT_EQ(check_password(admin, "NewStrongPass456"), 1);
+    EXPECT_EQ(authenticate_user(&db, "admin", "NewStrongPass456"), admin);
 
     while (db.users != nullptr) {
         User *next = db.users->next;
