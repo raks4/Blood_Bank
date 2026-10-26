@@ -1,0 +1,610 @@
+        -:    0:Source:src/blood.c
+        -:    1:/* blood.c - blood batches (donations), stock, and hospital requests. */
+        -:    2:#include "types.h"
+        -:    3:#include "blood.h"
+        -:    4:
+        -:    5:#include <stdio.h>
+        -:    6:#include <stdlib.h>
+        -:    7:#include <string.h>
+        -:    8:#include <time.h>
+        -:    9:
+function blood_group_name called 34 returned 100% blocks executed 100%
+       34:   10:static const char *blood_group_name(int group)
+        -:   11:{
+        -:   12:    static const char *const names[GROUP_COUNT] = {
+        -:   13:        "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+        -:   14:    };
+        -:   15:
+       34:   16:    return ((group >= 0) && (group < GROUP_COUNT)) ? names[group] : "?";
+branch  0 taken 32 (fallthrough)
+branch  1 taken 2
+branch  2 taken 32 (fallthrough)
+branch  3 taken 0
+        -:   17:}
+        -:   18:
+function copy_text called 10 returned 100% blocks executed 100%
+       10:   19:static int copy_text(char *destination, int size, const char *source)
+        -:   20:{
+       10:   21:    int length = (int)strlen(source);
+        -:   22:
+       10:   23:    if (length >= size) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 9
+        1:   24:        return 0;
+        -:   25:    }
+        9:   26:    (void)memcpy(destination, source, (size_t)length + 1U);
+        9:   27:    return 1;
+        -:   28:}
+        -:   29:
+function format_date called 30 returned 100% blocks executed 100%
+       30:   30:static void format_date(long when, char *buffer, int size)
+        -:   31:{
+       30:   32:    time_t moment = (time_t)when;
+        -:   33:    struct tm parts;
+        -:   34:
+       30:   35:    if ((localtime_r(&moment, &parts) == NULL) ||
+call    0 returned 30
+branch  1 taken 28 (fallthrough)
+branch  2 taken 2
+       28:   36:        (strftime(buffer, (size_t)size, "%Y-%m-%d", &parts) == 0U)) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 28
+        2:   37:        (void)snprintf(buffer, (size_t)size, "%s", "unknown");
+        -:   38:    }
+       30:   39:}
+        -:   40:
+        -:   41:/* ---------------------------------------------------------------- */
+        -:   42:/* Batches: one batch = one donation = one bag of blood              */
+        -:   43:/* ---------------------------------------------------------------- */
+        -:   44:
+function find_batch called 13 returned 100% blocks executed 100%
+       13:   45:static Batch *find_batch(const Database *db, int id)
+        -:   46:{
+       13:   47:    Batch *current = db->batches;
+        -:   48:
+       19:   49:    while ((current != NULL) && (current->id != id)) {
+branch  0 taken 18 (fallthrough)
+branch  1 taken 1
+branch  2 taken 6
+branch  3 taken 12 (fallthrough)
+        6:   50:        current = current->next;
+        -:   51:    }
+       13:   52:    return current;
+        -:   53:}
+        -:   54:
+function next_batch_id called 6 returned 100% blocks executed 100%
+        6:   55:static int next_batch_id(const Database *db)
+        -:   56:{
+        6:   57:    int highest = 0;
+        6:   58:    Batch *current = db->batches;
+        -:   59:
+       12:   60:    while (current != NULL) {
+branch  0 taken 6
+branch  1 taken 6 (fallthrough)
+        6:   61:        if (current->id > highest) {
+branch  0 taken 6 (fallthrough)
+branch  1 taken 0
+        6:   62:            highest = current->id;
+        -:   63:        }
+        6:   64:        current = current->next;
+        -:   65:    }
+        6:   66:    return highest + 1;
+        -:   67:}
+        -:   68:
+function append_batch called 6 returned 100% blocks executed 100%
+        6:   69:static Batch *append_batch(Database *db, const Batch *source)
+        -:   70:{
+        6:   71:    Batch *node = malloc(sizeof(Batch));
+        -:   72:
+        6:   73:    if (node != NULL) {
+branch  0 taken 5 (fallthrough)
+branch  1 taken 1
+        5:   74:        *node = *source;
+        5:   75:        node->next = NULL;
+        5:   76:        if (db->batches == NULL) {
+branch  0 taken 3 (fallthrough)
+branch  1 taken 2
+        3:   77:            db->batches = node;
+        -:   78:        } else {
+        2:   79:            Batch *last = db->batches;
+        -:   80:
+        3:   81:            while (last->next != NULL) {
+branch  0 taken 1
+branch  1 taken 2 (fallthrough)
+        1:   82:                last = last->next;
+        -:   83:            }
+        2:   84:            last->next = node;
+        -:   85:        }
+        -:   86:    }
+        6:   87:    return node;
+        -:   88:}
+        -:   89:
+        -:   90:/* A new donation waits for blood tests before it can be used. */
+function record_donation called 8 returned 100% blocks executed 100%
+        8:   91:Result record_donation(Database *db, Donor *donor, int ml, long now, int *batch_id)
+        -:   92:{
+        8:   93:    Result result = RESULT_OK;
+        -:   94:    Batch batch;
+        -:   95:
+        8:   96:    if ((ml < MIN_DONATION_ML) || (ml > MAX_DONATION_ML)) {
+branch  0 taken 7 (fallthrough)
+branch  1 taken 1
+branch  2 taken 1 (fallthrough)
+branch  3 taken 6
+        2:   97:        result = RESULT_BAD_INPUT;
+        -:   98:    } else {
+        6:   99:        batch.id = next_batch_id(db);
+call    0 returned 6
+        6:  100:        batch.donor_id = donor->id;
+        6:  101:        batch.group = donor->group;
+        6:  102:        batch.ml_collected = ml;
+        6:  103:        batch.ml_left = ml;
+        6:  104:        batch.collected = now;
+        6:  105:        batch.expiry = now + ((long)SHELF_LIFE_DAYS * SECONDS_PER_DAY);
+        6:  106:        batch.status = BATCH_WAITING;
+        6:  107:        if (append_batch(db, &batch) == NULL) {
+call    0 returned 6
+branch  1 taken 1 (fallthrough)
+branch  2 taken 5
+        1:  108:            result = RESULT_NO_MEMORY;
+        -:  109:        } else {
+        5:  110:            donor->last_donation = now;
+        5:  111:            *batch_id = batch.id;
+        -:  112:        }
+        -:  113:    }
+        8:  114:    return result;
+        -:  115:}
+        -:  116:
+        -:  117:/* Called when the blood tests are fine: the batch becomes usable. */
+function update_batch called 13 returned 100% blocks executed 100%
+       13:  118:Result update_batch(const Database *db, int id, BatchAction action, long now)
+        -:  119:{
+       13:  120:    Result result = RESULT_OK;
+       13:  121:    Batch *batch = find_batch(db, id);
+call    0 returned 13
+        -:  122:
+       13:  123:    if (batch == NULL) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 12
+        1:  124:        result = RESULT_NOT_FOUND;
+       12:  125:    } else if (action == BATCH_TEST) {
+branch  0 taken 6 (fallthrough)
+branch  1 taken 6
+        6:  126:        if ((batch->status != BATCH_WAITING) || (batch->expiry < now)) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 2
+branch  2 taken 1 (fallthrough)
+branch  3 taken 3
+        3:  127:            result = RESULT_WRONG_STATE;
+        -:  128:        } else {
+        3:  129:            batch->status = BATCH_AVAILABLE;
+        -:  130:        }
+        6:  131:    } else if (action == BATCH_DISCARD) {
+branch  0 taken 5 (fallthrough)
+branch  1 taken 1
+        5:  132:        if (batch->status == BATCH_DISCARDED) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 3
+        2:  133:            result = RESULT_WRONG_STATE;
+        -:  134:        } else {
+        3:  135:            batch->status = BATCH_DISCARDED;
+        3:  136:            batch->ml_left = 0;
+        -:  137:        }
+        -:  138:    } else {
+        1:  139:        result = RESULT_BAD_INPUT;
+        -:  140:    }
+       13:  141:    return result;
+        -:  142:}
+        -:  143:
+        -:  144:/* Can this batch be given to a hospital today? */
+function batch_is_usable called 25 returned 100% blocks executed 100%
+       25:  145:static int batch_is_usable(const Batch *batch, long now)
+        -:  146:{
+       19:  147:    return ((batch->status == BATCH_AVAILABLE) && (batch->ml_left > 0) &&
+branch  0 taken 16 (fallthrough)
+branch  1 taken 3
+       44:  148:            (batch->expiry >= now)) ? 1 : 0;
+branch  0 taken 19 (fallthrough)
+branch  1 taken 6
+branch  2 taken 15 (fallthrough)
+branch  3 taken 1
+        -:  149:}
+        -:  150:
+        -:  151:/* How many ml of this blood group can be given out today? */
+function stock_for_group called 29 returned 100% blocks executed 100%
+       29:  152:int stock_for_group(const Database *db, int group, long now)
+        -:  153:{
+       29:  154:    int total = 0;
+       29:  155:    const Batch *current = db->batches;
+        -:  156:
+       99:  157:    while (current != NULL) {
+branch  0 taken 70
+branch  1 taken 29 (fallthrough)
+       70:  158:        if ((current->group == group) && (batch_is_usable(current, now) != 0)) {
+branch  0 taken 20 (fallthrough)
+branch  1 taken 50
+call    2 returned 20
+branch  3 taken 11 (fallthrough)
+branch  4 taken 9
+       11:  159:            total = total + current->ml_left;
+        -:  160:        }
+       70:  161:        current = current->next;
+        -:  162:    }
+       29:  163:    return total;
+        -:  164:}
+        -:  165:
+        -:  166:/* The usable batch of this group that expires first (old blood is used first). */
+function oldest_usable_batch called 3 returned 100% blocks executed 100%
+        3:  167:static Batch *oldest_usable_batch(const Database *db, int group, long now)
+        -:  168:{
+        3:  169:    Batch *best = NULL;
+        3:  170:    Batch *current = db->batches;
+        -:  171:
+        8:  172:    while (current != NULL) {
+branch  0 taken 5
+branch  1 taken 3 (fallthrough)
+        5:  173:        if ((current->group == group) && (batch_is_usable(current, now) != 0)) {
+branch  0 taken 5 (fallthrough)
+branch  1 taken 0
+call    2 returned 5
+branch  3 taken 4 (fallthrough)
+branch  4 taken 1
+        4:  174:            if ((best == NULL) || (current->expiry < best->expiry)) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 3
+branch  2 taken 0 (fallthrough)
+branch  3 taken 1
+        3:  175:                best = current;
+        -:  176:            }
+        -:  177:        }
+        5:  178:        current = current->next;
+        -:  179:    }
+        3:  180:    return best;
+        -:  181:}
+        -:  182:
+function batch_status_text called 12 returned 100% blocks executed 100%
+       12:  183:static const char *batch_status_text(const Batch *batch, long now)
+        -:  184:{
+       12:  185:    const char *text = "available";
+        -:  186:
+       12:  187:    if (batch->status == BATCH_DISCARDED) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 11
+        1:  188:        text = "discarded";
+       11:  189:    } else if (batch->expiry < now) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 10
+        1:  190:        text = "expired";
+       10:  191:    } else if (batch->status == BATCH_WAITING) {
+branch  0 taken 5 (fallthrough)
+branch  1 taken 5
+        5:  192:        text = "waiting for tests";
+        5:  193:    } else if (batch->ml_left == 0) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 4
+        1:  194:        text = "empty";
+        -:  195:    } else {
+        4:  196:        text = "available";
+        -:  197:    }
+       12:  198:    return text;
+        -:  199:}
+        -:  200:
+        -:  201:/* Prints how much blood of each group is in stock. */
+function show_stock called 2 returned 100% blocks executed 100%
+        2:  202:void show_stock(const Database *db, long now)
+        -:  203:{
+        -:  204:    int group;
+        -:  205:
+        2:  206:    printf("\n%-6s %-18s %-20s %s\n", "Group", "Ready to use (ml)", "Waiting for tests (ml)", "");
+call    0 returned 2
+       18:  207:    for (group = 0; group < GROUP_COUNT; group++) {
+branch  0 taken 16
+branch  1 taken 2 (fallthrough)
+       16:  208:        int ready = stock_for_group(db, group, now);
+call    0 returned 16
+       16:  209:        int waiting = 0;
+       16:  210:        const Batch *current = db->batches;
+        -:  211:
+       56:  212:        while (current != NULL) {
+branch  0 taken 40
+branch  1 taken 16 (fallthrough)
+       40:  213:            if ((current->group == group) && (current->status == BATCH_WAITING) &&
+branch  0 taken 5 (fallthrough)
+branch  1 taken 35
+branch  2 taken 3 (fallthrough)
+branch  3 taken 2
+        3:  214:                (current->expiry >= now)) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 1
+        2:  215:                waiting = waiting + current->ml_left;
+        -:  216:            }
+       40:  217:            current = current->next;
+        -:  218:        }
+       16:  219:        printf("%-6s %-18d %-22d %s\n", blood_group_name(group), ready, waiting,
+branch  0 taken 15 (fallthrough)
+branch  1 taken 1
+call    2 returned 16
+call    3 returned 16
+        -:  220:               (ready < LOW_STOCK_ML) ? "LOW STOCK" : "");
+        -:  221:    }
+        2:  222:}
+        -:  223:
+        -:  224:/* Prints batches. Use donor_id = 0 to print all of them. */
+function list_batches called 9 returned 100% blocks executed 100%
+        9:  225:void list_batches(const Database *db, int donor_id, long now)
+        -:  226:{
+        9:  227:    const Batch *current = db->batches;
+        9:  228:    int shown = 0;
+        -:  229:
+        9:  230:    printf("\n%-5s %-6s %-6s %-9s %-8s %-11s %-11s %s\n", "Batch", "Donor", "Group", "Collected",
+call    0 returned 9
+        -:  231:           "Left ml", "Donated", "Expires", "Status");
+       34:  232:    while (current != NULL) {
+branch  0 taken 25
+branch  1 taken 9 (fallthrough)
+       25:  233:        if ((donor_id == 0) || (current->donor_id == donor_id)) {
+branch  0 taken 15 (fallthrough)
+branch  1 taken 10
+branch  2 taken 2 (fallthrough)
+branch  3 taken 13
+        -:  234:            char donated[16];
+        -:  235:            char expires[16];
+        -:  236:
+       12:  237:            format_date(current->collected, donated, (int)sizeof(donated));
+call    0 returned 12
+       12:  238:            format_date(current->expiry, expires, (int)sizeof(expires));
+call    0 returned 12
+       24:  239:            printf("%-5d %-6d %-6s %-9d %-8d %-11s %-11s %s\n", current->id, current->donor_id,
+call    0 returned 12
+call    1 returned 12
+       12:  240:                   blood_group_name(current->group), current->ml_collected, current->ml_left, donated,
+call    0 returned 12
+        -:  241:                   expires, batch_status_text(current, now));
+       12:  242:            shown++;
+        -:  243:        }
+       25:  244:        current = current->next;
+        -:  245:    }
+        9:  246:    printf("%d batch(es) shown.\n", shown);
+call    0 returned 9
+        9:  247:}
+        -:  248:
+        -:  249:/* ---------------------------------------------------------------- */
+        -:  250:/* Requests from hospitals                                           */
+        -:  251:/* ---------------------------------------------------------------- */
+        -:  252:
+function find_request called 15 returned 100% blocks executed 100%
+       15:  253:static Request *find_request(const Database *db, int id)
+        -:  254:{
+       15:  255:    Request *current = db->requests;
+        -:  256:
+       20:  257:    while ((current != NULL) && (current->id != id)) {
+branch  0 taken 19 (fallthrough)
+branch  1 taken 1
+branch  2 taken 5
+branch  3 taken 14 (fallthrough)
+        5:  258:        current = current->next;
+        -:  259:    }
+       15:  260:    return current;
+        -:  261:}
+        -:  262:
+function next_request_id called 14 returned 100% blocks executed 100%
+       14:  263:static int next_request_id(const Database *db)
+        -:  264:{
+       14:  265:    int highest = 0;
+       14:  266:    Request *current = db->requests;
+        -:  267:
+       37:  268:    while (current != NULL) {
+branch  0 taken 23
+branch  1 taken 14 (fallthrough)
+       23:  269:        if (current->id > highest) {
+branch  0 taken 23 (fallthrough)
+branch  1 taken 0
+       23:  270:            highest = current->id;
+        -:  271:        }
+       23:  272:        current = current->next;
+        -:  273:    }
+       14:  274:    return highest + 1;
+        -:  275:}
+        -:  276:
+function append_request called 9 returned 100% blocks executed 100%
+        9:  277:static Request *append_request(Database *db, const Request *source)
+        -:  278:{
+        9:  279:    Request *node = malloc(sizeof(Request));
+        -:  280:
+        9:  281:    if (node != NULL) {
+branch  0 taken 8 (fallthrough)
+branch  1 taken 1
+        8:  282:        *node = *source;
+        8:  283:        node->next = NULL;
+        8:  284:        if (db->requests == NULL) {
+branch  0 taken 4 (fallthrough)
+branch  1 taken 4
+        4:  285:            db->requests = node;
+        -:  286:        } else {
+        4:  287:            Request *last = db->requests;
+        -:  288:
+        5:  289:            while (last->next != NULL) {
+branch  0 taken 1
+branch  1 taken 4 (fallthrough)
+        1:  290:                last = last->next;
+        -:  291:            }
+        4:  292:            last->next = node;
+        -:  293:        }
+        -:  294:    }
+        9:  295:    return node;
+        -:  296:}
+        -:  297:
+function add_request called 14 returned 100% blocks executed 100%
+       14:  298:Result add_request(Database *db, const char *hospital, int group, int ml, long now, int *new_id)
+        -:  299:{
+       14:  300:    Result result = RESULT_OK;
+        -:  301:    Request request;
+        -:  302:
+       14:  303:    request.id = next_request_id(db);
+call    0 returned 14
+       14:  304:    request.group = group;
+       14:  305:    request.ml = ml;
+       14:  306:    request.date = now;
+       14:  307:    request.status = REQUEST_PENDING;
+       14:  308:    if ((group < 0) || (group >= GROUP_COUNT) || (ml < MIN_REQUEST_ML) || (ml > MAX_REQUEST_ML)) {
+branch  0 taken 13 (fallthrough)
+branch  1 taken 1
+branch  2 taken 12 (fallthrough)
+branch  3 taken 1
+branch  4 taken 11 (fallthrough)
+branch  5 taken 1
+branch  6 taken 1 (fallthrough)
+branch  7 taken 10
+        4:  309:        result = RESULT_BAD_INPUT;
+       10:  310:    } else if (copy_text(request.hospital, NAME_LEN, hospital) == 0) {
+call    0 returned 10
+branch  1 taken 1 (fallthrough)
+branch  2 taken 9
+        1:  311:        result = RESULT_BAD_INPUT;
+        9:  312:    } else if (append_request(db, &request) == NULL) {
+call    0 returned 9
+branch  1 taken 1 (fallthrough)
+branch  2 taken 8
+        1:  313:        result = RESULT_NO_MEMORY;
+        -:  314:    } else {
+        8:  315:        *new_id = request.id;
+        -:  316:    }
+       14:  317:    return result;
+        -:  318:}
+        -:  319:
+        -:  320:/* Gives the blood to the hospital: takes it from the batches that expire first. */
+function update_request called 15 returned 100% blocks executed 96%
+       15:  321:Result update_request(const Database *db, int id, RequestAction action, long now)
+        -:  322:{
+       15:  323:    Result result = RESULT_OK;
+       15:  324:    Request *request = find_request(db, id);
+call    0 returned 15
+        -:  325:
+       15:  326:    if (request == NULL) {
+branch  0 taken 1 (fallthrough)
+branch  1 taken 14
+        1:  327:        result = RESULT_NOT_FOUND;
+       14:  328:    } else if ((action != REQUEST_FULFILL) && (action != REQUEST_REJECT)) {
+branch  0 taken 8 (fallthrough)
+branch  1 taken 6
+branch  2 taken 1 (fallthrough)
+branch  3 taken 7
+        1:  329:        result = RESULT_BAD_INPUT;
+       13:  330:    } else if (request->status != REQUEST_PENDING) {
+branch  0 taken 6 (fallthrough)
+branch  1 taken 7
+        6:  331:        result = RESULT_WRONG_STATE;
+        7:  332:    } else if ((action == REQUEST_FULFILL) &&
+branch  0 taken 4 (fallthrough)
+branch  1 taken 3
+        4:  333:               (stock_for_group(db, request->group, now) < request->ml)) {
+call    0 returned 4
+branch  1 taken 2 (fallthrough)
+branch  2 taken 2
+        2:  334:        result = RESULT_NOT_ENOUGH_STOCK;
+        5:  335:    } else if (action == REQUEST_FULFILL) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 3
+        2:  336:        int still_needed = request->ml;
+        -:  337:
+        5:  338:        while (still_needed > 0) {
+branch  0 taken 3
+branch  1 taken 2 (fallthrough)
+        3:  339:            Batch *batch = oldest_usable_batch(db, request->group, now);
+call    0 returned 3
+        -:  340:
+        3:  341:            if (batch == NULL) {
+branch  0 taken 0 (fallthrough)
+branch  1 taken 3
+    #####:  342:                still_needed = 0;               /* cannot happen: stock was checked above */
+        -:  343:            } else {
+        3:  344:                int taken = (batch->ml_left < still_needed) ? batch->ml_left : still_needed;
+        3:  345:                batch->ml_left = batch->ml_left - taken;
+        3:  346:                still_needed = still_needed - taken;
+        -:  347:            }
+        -:  348:        }
+        2:  349:        request->status = REQUEST_FULFILLED;
+        -:  350:    } else {
+        3:  351:        request->status = REQUEST_REJECTED;
+        -:  352:    }
+       15:  353:    return result;
+        -:  354:}
+        -:  355:
+function list_requests called 3 returned 100% blocks executed 100%
+        3:  356:void list_requests(const Database *db)
+        -:  357:{
+        3:  358:    const Request *current = db->requests;
+        3:  359:    int shown = 0;
+        -:  360:
+        3:  361:    printf("\n%-4s %-24s %-6s %-8s %-11s %s\n", "ID", "Hospital", "Group", "ml", "Date", "Status");
+call    0 returned 3
+        9:  362:    while (current != NULL) {
+branch  0 taken 6
+branch  1 taken 3 (fallthrough)
+        -:  363:        char date[16];
+        6:  364:        const char *status = "pending";
+        -:  365:
+        6:  366:        format_date(current->date, date, (int)sizeof(date));
+call    0 returned 6
+        6:  367:        if (current->status == REQUEST_FULFILLED) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 4
+        2:  368:            status = "fulfilled";
+        4:  369:        } else if (current->status == REQUEST_REJECTED) {
+branch  0 taken 2 (fallthrough)
+branch  1 taken 2
+        2:  370:            status = "rejected";
+        -:  371:        } else {
+        2:  372:            status = "pending";
+        -:  373:        }
+        6:  374:        printf("%-4d %-24s %-6s %-8d %-11s %s\n", current->id, current->hospital,
+call    0 returned 6
+        6:  375:               blood_group_name(current->group), current->ml, date, status);
+call    0 returned 6
+        6:  376:        shown++;
+        6:  377:        current = current->next;
+        -:  378:    }
+        3:  379:    printf("%d request(s) shown.\n", shown);
+call    0 returned 3
+        3:  380:}
+        -:  381:
+        -:  382:/* ---------------------------------------------------------------- */
+        -:  383:/* Giving all memory back when the program ends                      */
+        -:  384:/* ---------------------------------------------------------------- */
+        -:  385:
+function free_database called 96 returned 100% blocks executed 100%
+       96:  386:void free_database(Database *db)
+        -:  387:{
+      310:  388:    while (db->donors != NULL) {
+branch  0 taken 214
+branch  1 taken 96 (fallthrough)
+      214:  389:        Donor *next = db->donors->next;
+        -:  390:
+      214:  391:        free(db->donors);
+      214:  392:        db->donors = next;
+        -:  393:    }
+      136:  394:    while (db->batches != NULL) {
+branch  0 taken 40
+branch  1 taken 96 (fallthrough)
+       40:  395:        Batch *next = db->batches->next;
+        -:  396:
+       40:  397:        free(db->batches);
+       40:  398:        db->batches = next;
+        -:  399:    }
+      118:  400:    while (db->requests != NULL) {
+branch  0 taken 22
+branch  1 taken 96 (fallthrough)
+       22:  401:        Request *next = db->requests->next;
+        -:  402:
+       22:  403:        free(db->requests);
+       22:  404:        db->requests = next;
+        -:  405:    }
+      135:  406:    while (db->users != NULL) {
+branch  0 taken 39
+branch  1 taken 96 (fallthrough)
+       39:  407:        User *next = db->users->next;
+        -:  408:
+       39:  409:        free(db->users);
+       39:  410:        db->users = next;
+        -:  411:    }
+       96:  412:}

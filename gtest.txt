@@ -1,0 +1,113 @@
+mkdir -p build/tests
+for source in src/*.c; do \
+  name=$(basename "$source" .c); \
+  if [ "$name" = main ]; then extra=-Dmain=bloodbank_app_main; else extra=; fi; \
+  gcc -std=c99 -D_POSIX_C_SOURCE=200809L -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow -O0 -g  $extra -c "$source" -o build/tests/$name.o || exit 1; \
+done
+g++ -std=c++17 -Iinclude -Itests -Wall -Wextra -O0 -g  -o build/tests/test_suite tests/test_*.cpp build/tests/*.o \
+  -Wl,--wrap=malloc -lgtest_main -lgtest -lcrypto -pthread
+./build/tests/test_suite
+Running main() from ./googletest/src/gtest_main.cc
+[==========] Running 38 tests from 7 test suites.
+[----------] Global test environment set-up.
+[----------] 2 tests from AuditTests
+[ RUN      ] AuditTests.AppendsTimestampedSanitizedEvents
+[       OK ] AuditTests.AppendsTimestampedSanitizedEvents (2 ms)
+[ RUN      ] AuditTests.ReportsWhenLogCannotBeOpened
+[       OK ] AuditTests.ReportsWhenLogCannotBeOpened (0 ms)
+[----------] 2 tests from AuditTests (2 ms total)
+
+[----------] 9 tests from BloodTests
+[ RUN      ] BloodTests.RecordDonation
+[       OK ] BloodTests.RecordDonation (0 ms)
+[ RUN      ] BloodTests.UpdateBatch
+[       OK ] BloodTests.UpdateBatch (0 ms)
+[ RUN      ] BloodTests.StockForGroup
+[       OK ] BloodTests.StockForGroup (0 ms)
+[ RUN      ] BloodTests.ShowStock
+[       OK ] BloodTests.ShowStock (0 ms)
+[ RUN      ] BloodTests.ListBatches
+[       OK ] BloodTests.ListBatches (0 ms)
+[ RUN      ] BloodTests.AddRequest
+[       OK ] BloodTests.AddRequest (0 ms)
+[ RUN      ] BloodTests.UpdateRequest
+[       OK ] BloodTests.UpdateRequest (0 ms)
+[ RUN      ] BloodTests.ListRequests
+[       OK ] BloodTests.ListRequests (0 ms)
+[ RUN      ] BloodTests.FreeDatabase
+[       OK ] BloodTests.FreeDatabase (0 ms)
+[----------] 9 tests from BloodTests (0 ms total)
+
+[----------] 6 tests from DonorTests
+[ RUN      ] DonorTests.FindDonor
+[       OK ] DonorTests.FindDonor (0 ms)
+[ RUN      ] DonorTests.AddDonor
+[       OK ] DonorTests.AddDonor (0 ms)
+[ RUN      ] DonorTests.UpdateDonor
+[       OK ] DonorTests.UpdateDonor (0 ms)
+[ RUN      ] DonorTests.UpdateDonorStatuses
+[       OK ] DonorTests.UpdateDonorStatuses (0 ms)
+[ RUN      ] DonorTests.DonorProblem
+[       OK ] DonorTests.DonorProblem (0 ms)
+[ RUN      ] DonorTests.ListDonors
+[       OK ] DonorTests.ListDonors (0 ms)
+[----------] 6 tests from DonorTests (0 ms total)
+
+[----------] 12 tests from MainTests
+[ RUN      ] MainTests.CreatesAccountLogsInRunsDonorMenuAndExits
+[       OK ] MainTests.CreatesAccountLogsInRunsDonorMenuAndExits (1 ms)
+[ RUN      ] MainTests.LoginStopsAfterThreeInvalidAttempts
+[       OK ] MainTests.LoginStopsAfterThreeInvalidAttempts (0 ms)
+[ RUN      ] MainTests.DonationMenuReportsMissingDonorsAndListsHistory
+[       OK ] MainTests.DonationMenuReportsMissingDonorsAndListsHistory (0 ms)
+[ RUN      ] MainTests.InventoryMenuTestsAndDiscardsDonationBatches
+[       OK ] MainTests.InventoryMenuTestsAndDiscardsDonationBatches (3 ms)
+[ RUN      ] MainTests.RequestsAndAccountMenusHandleSuccessfulActions
+[       OK ] MainTests.RequestsAndAccountMenusHandleSuccessfulActions (2 ms)
+[ RUN      ] MainTests.ExercisesMenuActionsAndFailureResults
+[       OK ] MainTests.ExercisesMenuActionsAndFailureResults (7 ms)
+[ RUN      ] MainTests.UpdatesInactiveDonorsBeforeLogin
+[       OK ] MainTests.UpdatesInactiveDonorsBeforeLogin (1 ms)
+[ RUN      ] MainTests.RejectsDamagedDataBeforeLogin
+The data files are damaged. Nothing was changed. Restore them and try again.
+[       OK ] MainTests.RejectsDamagedDataBeforeLogin (0 ms)
+[ RUN      ] MainTests.AddDonorHandlesEndOfInput
+[       OK ] MainTests.AddDonorHandlesEndOfInput (0 ms)
+[ RUN      ] MainTests.FirstRunSetupHandlesEndOfInput
+[       OK ] MainTests.FirstRunSetupHandlesEndOfInput (0 ms)
+[ RUN      ] MainTests.ActionsHandleEndOfInputAtEachPrompt
+[       OK ] MainTests.ActionsHandleEndOfInputAtEachPrompt (15 ms)
+[ RUN      ] MainTests.ReportsInvalidAndDuplicateAccountCreation
+[       OK ] MainTests.ReportsInvalidAndDuplicateAccountCreation (1 ms)
+[----------] 12 tests from MainTests (36 ms total)
+
+[----------] 2 tests from StorageTests
+[ RUN      ] StorageTests.SaveAll
+[       OK ] StorageTests.SaveAll (4 ms)
+[ RUN      ] StorageTests.LoadAll
+[       OK ] StorageTests.LoadAll (17 ms)
+[----------] 2 tests from StorageTests (21 ms total)
+
+[----------] 3 tests from UserTests
+[ RUN      ] UserTests.CreateUser
+[       OK ] UserTests.CreateUser (0 ms)
+[ RUN      ] UserTests.AuthenticateUser
+[       OK ] UserTests.AuthenticateUser (0 ms)
+[ RUN      ] UserTests.ChangePassword
+[       OK ] UserTests.ChangePassword (0 ms)
+[----------] 3 tests from UserTests (0 ms total)
+
+[----------] 4 tests from UtilsTests
+[ RUN      ] UtilsTests.Today
+[       OK ] UtilsTests.Today (0 ms)
+[ RUN      ] UtilsTests.CurrentYear
+[       OK ] UtilsTests.CurrentYear (0 ms)
+[ RUN      ] UtilsTests.AskInput
+[       OK ] UtilsTests.AskInput (7 ms)
+[ RUN      ] UtilsTests.ReadInput
+[       OK ] UtilsTests.ReadInput (2 ms)
+[----------] 4 tests from UtilsTests (9 ms total)
+
+[----------] Global test environment tear-down
+[==========] 38 tests from 7 test suites ran. (71 ms total)
+[  PASSED  ] 38 tests.

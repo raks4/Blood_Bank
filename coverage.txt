@@ -1,0 +1,168 @@
+rm -f build/coverage/*.gcda
+make test TEST_BUILD=build/coverage COVERAGE_FLAGS=--coverage
+make[1]: Entering directory '/workspaces/Blood_Bank'
+mkdir -p build/coverage
+for source in src/*.c; do \
+  name=$(basename "$source" .c); \
+  if [ "$name" = main ]; then extra=-Dmain=bloodbank_app_main; else extra=; fi; \
+  gcc -std=c99 -D_POSIX_C_SOURCE=200809L -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow -O0 -g --coverage $extra -c "$source" -o build/coverage/$name.o || exit 1; \
+done
+g++ -std=c++17 -Iinclude -Itests -Wall -Wextra -O0 -g --coverage -o build/coverage/test_suite tests/test_*.cpp build/coverage/*.o \
+  -Wl,--wrap=malloc -lgtest_main -lgtest -lcrypto -pthread
+./build/coverage/test_suite
+Running main() from ./googletest/src/gtest_main.cc
+[==========] Running 38 tests from 7 test suites.
+[----------] Global test environment set-up.
+[----------] 2 tests from AuditTests
+[ RUN      ] AuditTests.AppendsTimestampedSanitizedEvents
+[       OK ] AuditTests.AppendsTimestampedSanitizedEvents (4 ms)
+[ RUN      ] AuditTests.ReportsWhenLogCannotBeOpened
+[       OK ] AuditTests.ReportsWhenLogCannotBeOpened (0 ms)
+[----------] 2 tests from AuditTests (4 ms total)
+
+[----------] 9 tests from BloodTests
+[ RUN      ] BloodTests.RecordDonation
+[       OK ] BloodTests.RecordDonation (0 ms)
+[ RUN      ] BloodTests.UpdateBatch
+[       OK ] BloodTests.UpdateBatch (0 ms)
+[ RUN      ] BloodTests.StockForGroup
+[       OK ] BloodTests.StockForGroup (0 ms)
+[ RUN      ] BloodTests.ShowStock
+[       OK ] BloodTests.ShowStock (0 ms)
+[ RUN      ] BloodTests.ListBatches
+[       OK ] BloodTests.ListBatches (0 ms)
+[ RUN      ] BloodTests.AddRequest
+[       OK ] BloodTests.AddRequest (0 ms)
+[ RUN      ] BloodTests.UpdateRequest
+[       OK ] BloodTests.UpdateRequest (0 ms)
+[ RUN      ] BloodTests.ListRequests
+[       OK ] BloodTests.ListRequests (1 ms)
+[ RUN      ] BloodTests.FreeDatabase
+[       OK ] BloodTests.FreeDatabase (0 ms)
+[----------] 9 tests from BloodTests (2 ms total)
+
+[----------] 6 tests from DonorTests
+[ RUN      ] DonorTests.FindDonor
+[       OK ] DonorTests.FindDonor (0 ms)
+[ RUN      ] DonorTests.AddDonor
+[       OK ] DonorTests.AddDonor (0 ms)
+[ RUN      ] DonorTests.UpdateDonor
+[       OK ] DonorTests.UpdateDonor (0 ms)
+[ RUN      ] DonorTests.UpdateDonorStatuses
+[       OK ] DonorTests.UpdateDonorStatuses (0 ms)
+[ RUN      ] DonorTests.DonorProblem
+[       OK ] DonorTests.DonorProblem (0 ms)
+[ RUN      ] DonorTests.ListDonors
+[       OK ] DonorTests.ListDonors (0 ms)
+[----------] 6 tests from DonorTests (0 ms total)
+
+[----------] 12 tests from MainTests
+[ RUN      ] MainTests.CreatesAccountLogsInRunsDonorMenuAndExits
+[       OK ] MainTests.CreatesAccountLogsInRunsDonorMenuAndExits (3 ms)
+[ RUN      ] MainTests.LoginStopsAfterThreeInvalidAttempts
+[       OK ] MainTests.LoginStopsAfterThreeInvalidAttempts (1 ms)
+[ RUN      ] MainTests.DonationMenuReportsMissingDonorsAndListsHistory
+[       OK ] MainTests.DonationMenuReportsMissingDonorsAndListsHistory (1 ms)
+[ RUN      ] MainTests.InventoryMenuTestsAndDiscardsDonationBatches
+[       OK ] MainTests.InventoryMenuTestsAndDiscardsDonationBatches (2 ms)
+[ RUN      ] MainTests.RequestsAndAccountMenusHandleSuccessfulActions
+[       OK ] MainTests.RequestsAndAccountMenusHandleSuccessfulActions (3 ms)
+[ RUN      ] MainTests.ExercisesMenuActionsAndFailureResults
+[       OK ] MainTests.ExercisesMenuActionsAndFailureResults (7 ms)
+[ RUN      ] MainTests.UpdatesInactiveDonorsBeforeLogin
+[       OK ] MainTests.UpdatesInactiveDonorsBeforeLogin (1 ms)
+[ RUN      ] MainTests.RejectsDamagedDataBeforeLogin
+The data files are damaged. Nothing was changed. Restore them and try again.
+[       OK ] MainTests.RejectsDamagedDataBeforeLogin (0 ms)
+[ RUN      ] MainTests.AddDonorHandlesEndOfInput
+[       OK ] MainTests.AddDonorHandlesEndOfInput (0 ms)
+[ RUN      ] MainTests.FirstRunSetupHandlesEndOfInput
+[       OK ] MainTests.FirstRunSetupHandlesEndOfInput (0 ms)
+[ RUN      ] MainTests.ActionsHandleEndOfInputAtEachPrompt
+[       OK ] MainTests.ActionsHandleEndOfInputAtEachPrompt (14 ms)
+[ RUN      ] MainTests.ReportsInvalidAndDuplicateAccountCreation
+[       OK ] MainTests.ReportsInvalidAndDuplicateAccountCreation (1 ms)
+[----------] 12 tests from MainTests (38 ms total)
+
+[----------] 2 tests from StorageTests
+[ RUN      ] StorageTests.SaveAll
+[       OK ] StorageTests.SaveAll (3 ms)
+[ RUN      ] StorageTests.LoadAll
+[       OK ] StorageTests.LoadAll (9 ms)
+[----------] 2 tests from StorageTests (12 ms total)
+
+[----------] 3 tests from UserTests
+[ RUN      ] UserTests.CreateUser
+[       OK ] UserTests.CreateUser (0 ms)
+[ RUN      ] UserTests.AuthenticateUser
+[       OK ] UserTests.AuthenticateUser (0 ms)
+[ RUN      ] UserTests.ChangePassword
+[       OK ] UserTests.ChangePassword (0 ms)
+[----------] 3 tests from UserTests (0 ms total)
+
+[----------] 4 tests from UtilsTests
+[ RUN      ] UtilsTests.Today
+[       OK ] UtilsTests.Today (0 ms)
+[ RUN      ] UtilsTests.CurrentYear
+[       OK ] UtilsTests.CurrentYear (0 ms)
+[ RUN      ] UtilsTests.AskInput
+[       OK ] UtilsTests.AskInput (3 ms)
+[ RUN      ] UtilsTests.ReadInput
+[       OK ] UtilsTests.ReadInput (2 ms)
+[----------] 4 tests from UtilsTests (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 38 tests from 7 test suites ran. (64 ms total)
+[  PASSED  ] 38 tests.
+make[1]: Leaving directory '/workspaces/Blood_Bank'
+gcov -b -c -o build/coverage src/*.c
+File 'src/audit.c'
+Lines executed:86.21% of 29
+Branches executed:100.00% of 38
+Taken at least once:60.53% of 38
+Calls executed:100.00% of 12
+Creating 'audit.c.gcov'
+
+File 'src/blood.c'
+Lines executed:99.57% of 231
+Branches executed:100.00% of 148
+Taken at least once:95.27% of 148
+Calls executed:100.00% of 28
+Creating 'blood.c.gcov'
+
+File 'src/donors.c'
+Lines executed:100.00% of 122
+Branches executed:100.00% of 82
+Taken at least once:95.12% of 82
+Calls executed:100.00% of 13
+Creating 'donors.c.gcov'
+
+File 'src/main.c'
+Lines executed:97.16% of 422
+Branches executed:100.00% of 187
+Taken at least once:88.24% of 187
+Calls executed:95.83% of 264
+Creating 'main.c.gcov'
+
+File 'src/storage.c'
+Lines executed:99.63% of 271
+Branches executed:100.00% of 220
+Taken at least once:96.36% of 220
+Calls executed:100.00% of 74
+Creating 'storage.c.gcov'
+
+File 'src/users.c'
+Lines executed:100.00% of 73
+Branches executed:100.00% of 62
+Taken at least once:93.55% of 62
+Calls executed:100.00% of 16
+Creating 'users.c.gcov'
+
+File 'src/utils.c'
+Lines executed:100.00% of 184
+Branches executed:100.00% of 156
+Taken at least once:94.87% of 156
+Calls executed:100.00% of 41
+Creating 'utils.c.gcov'
+
+Lines executed:98.65% of 1332

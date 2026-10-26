@@ -1,0 +1,113 @@
+        -:    0:Source:src/audit.c
+        -:    1:/* audit.c - append timestamped events to audit.log. */
+        -:    2:#include "audit.h"
+        -:    3:
+        -:    4:#include <stdio.h>
+        -:    5:#include <time.h>
+        -:    6:
+        -:    7:#define AUDIT_FILE "audit.log"
+        -:    8:
+function write_field called 399 returned 100% blocks executed 92%
+      399:    9:static int write_field(FILE *file, const char *text)
+        -:   10:{
+      399:   11:    int ok = 1;
+        -:   12:
+     7019:   13:    while ((*text != '\0') && (ok == 1)) {
+branch  0 taken 6620 (fallthrough)
+branch  1 taken 399
+branch  2 taken 6620
+branch  3 taken 0 (fallthrough)
+     6620:   14:        char character = *text;
+        -:   15:
+     6620:   16:        if ((character == '|') || (character == '\n') || (character == '\r')) {
+branch  0 taken 6619 (fallthrough)
+branch  1 taken 1
+branch  2 taken 6618 (fallthrough)
+branch  3 taken 1
+branch  4 taken 0 (fallthrough)
+branch  5 taken 6618
+        2:   17:            character = '_';
+        -:   18:        }
+     6620:   19:        if (fputc((unsigned char)character, file) == EOF) {
+call    0 returned 6620
+branch  1 taken 0 (fallthrough)
+branch  2 taken 6620
+    #####:   20:            ok = 0;
+        -:   21:        }
+     6620:   22:        text++;
+        -:   23:    }
+      399:   24:    return ok;
+        -:   25:}
+        -:   26:
+function audit_log_event called 134 returned 100% blocks executed 88%
+      134:   27:int audit_log_event(const char *actor, const char *action)
+        -:   28:{
+      134:   29:    int ok = 0;
+      134:   30:    time_t now = time(NULL);
+call    0 returned 134
+        -:   31:    struct tm local_time;
+        -:   32:    char timestamp[32];
+        -:   33:
+      134:   34:    if ((now != (time_t)-1) && (localtime_r(&now, &local_time) != NULL) &&
+branch  0 taken 134 (fallthrough)
+branch  1 taken 0
+call    2 returned 134
+branch  3 taken 134 (fallthrough)
+branch  4 taken 0
+      134:   35:        (strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S%z", &local_time) > 0U)) {
+branch  0 taken 134 (fallthrough)
+branch  1 taken 0
+      134:   36:        FILE *file = fopen(AUDIT_FILE, "a");
+call    0 returned 134
+        -:   37:
+      134:   38:        if (file != NULL) {
+branch  0 taken 133 (fallthrough)
+branch  1 taken 1
+      133:   39:            int written = write_field(file, timestamp);
+call    0 returned 133
+        -:   40:
+      133:   41:            if ((written != 0) && (fputs(" | ", file) >= 0)) {
+branch  0 taken 133 (fallthrough)
+branch  1 taken 0
+call    2 returned 133
+branch  3 taken 133 (fallthrough)
+branch  4 taken 0
+     133*:   42:                written = write_field(file, (actor != NULL) ? actor : "anonymous");
+branch  0 taken 133 (fallthrough)
+branch  1 taken 0
+call    2 returned 133
+        -:   43:            } else {
+    #####:   44:                written = 0;
+        -:   45:            }
+      133:   46:            if ((written != 0) && (fputs(" | ", file) >= 0)) {
+branch  0 taken 133 (fallthrough)
+branch  1 taken 0
+call    2 returned 133
+branch  3 taken 133 (fallthrough)
+branch  4 taken 0
+      133:   47:                written = write_field(file, action);
+call    0 returned 133
+        -:   48:            } else {
+    #####:   49:                written = 0;
+        -:   50:            }
+      133:   51:            if ((written != 0) && (fputc('\n', file) != EOF) && (ferror(file) == 0)) {
+branch  0 taken 133 (fallthrough)
+branch  1 taken 0
+call    2 returned 133
+branch  3 taken 133 (fallthrough)
+branch  4 taken 0
+call    5 returned 133
+branch  6 taken 133 (fallthrough)
+branch  7 taken 0
+      133:   52:                ok = 1;
+        -:   53:            }
+      133:   54:            if (fclose(file) != 0) {
+call    0 returned 133
+branch  1 taken 0 (fallthrough)
+branch  2 taken 133
+    #####:   55:                ok = 0;
+        -:   56:            }
+        -:   57:        }
+        -:   58:    }
+      134:   59:    return ok;
+        -:   60:}
