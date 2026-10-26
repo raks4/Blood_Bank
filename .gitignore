@@ -2,3 +2,4 @@
 /*.c.gcov
 /tools/
 /build/
+/.vscode/
