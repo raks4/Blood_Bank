@@ -6,6 +6,7 @@
 #include <fstream>
 #include <string>
 
+#include <sys/resource.h>
 #include <unistd.h>
 
 extern "C" {
@@ -103,6 +104,120 @@ TEST(StorageTests, SavesLoadsAndRejectsDamagedData)
     Database bad = {};
     EXPECT_EQ(load_all(&bad), 0);
     free_database(&bad);
+
+    std::filesystem::current_path(original);
+    std::filesystem::remove_all(temporary);
+}
+
+TEST(StorageTests, ValidatesFileFormatsAndReportsSaveFailures)
+{
+    const std::filesystem::path original = std::filesystem::current_path();
+    const std::filesystem::path temporary =
+        std::filesystem::temp_directory_path() /
+        ("bloodbank-storage-errors-" + std::to_string(static_cast<long long>(getpid())));
+    ASSERT_TRUE(std::filesystem::create_directory(temporary));
+    std::filesystem::current_path(temporary);
+
+    {
+        std::ofstream donors("donors.txt");
+        ASSERT_TRUE(donors.good());
+        donors << "\n \t\n"
+                  "1|Old Active|1234567890|0|1990|1|0\r\n"
+                  "2|Old Inactive|1234567890|1|1990|0|0\n";
+    }
+    Database legacy = {};
+    ASSERT_EQ(load_all(&legacy), 1);
+    ASSERT_NE(legacy.donors, nullptr);
+    EXPECT_NE(legacy.donors->next, nullptr);
+    free_database(&legacy);
+
+    {
+        std::ofstream donors("donors.txt", std::ios::trunc);
+        ASSERT_TRUE(donors.good());
+        donors << "0|Bad Donor|1234567890|0|1990|1|0|1|0\n";
+    }
+    Database bad_donor = {};
+    EXPECT_EQ(load_all(&bad_donor), 0);
+    free_database(&bad_donor);
+    std::filesystem::remove("donors.txt");
+
+    {
+        std::ofstream batches("batches.txt");
+        ASSERT_TRUE(batches.good());
+        batches << "1|0|0|300|301|100|200|1\n";
+    }
+    Database bad_batch = {};
+    EXPECT_EQ(load_all(&bad_batch), 0);
+    free_database(&bad_batch);
+    std::filesystem::remove("batches.txt");
+
+    {
+        std::ofstream requests("requests.txt");
+        ASSERT_TRUE(requests.good());
+        requests << "1|City Hospital|8|100|100|0\n";
+    }
+    Database bad_request = {};
+    EXPECT_EQ(load_all(&bad_request), 0);
+    free_database(&bad_request);
+    std::filesystem::remove("requests.txt");
+
+    {
+        std::ofstream users("users.txt");
+        ASSERT_TRUE(users.good());
+        users << "staff|00|00\n";
+    }
+    Database bad_user = {};
+    EXPECT_EQ(load_all(&bad_user), 0);
+    free_database(&bad_user);
+    std::filesystem::remove("users.txt");
+
+    {
+        std::ofstream batches("batches.txt");
+        ASSERT_TRUE(batches.good());
+        batches << "malformed batch\n";
+    }
+    Database malformed_batch = {};
+    EXPECT_EQ(load_all(&malformed_batch), 0);
+    free_database(&malformed_batch);
+    std::filesystem::remove("batches.txt");
+
+    {
+        std::ofstream requests("requests.txt");
+        ASSERT_TRUE(requests.good());
+        requests << "malformed request\n";
+    }
+    Database malformed_request = {};
+    EXPECT_EQ(load_all(&malformed_request), 0);
+    free_database(&malformed_request);
+    std::filesystem::remove("requests.txt");
+
+    for (const char *name : {"donors.tmp", "batches.tmp", "requests.tmp", "users.tmp"}) {
+        ASSERT_TRUE(std::filesystem::create_directory(name));
+    }
+    Database empty = {};
+    EXPECT_EQ(save_all(&empty), 0);
+    for (const char *name : {"donors.tmp", "batches.tmp", "requests.tmp", "users.tmp"}) {
+        std::filesystem::remove(name);
+    }
+
+    struct rlimit original_limit = {};
+    ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &original_limit), 0);
+    {
+        std::ofstream donors("donors.txt");
+        ASSERT_TRUE(donors.good());
+        donors << "1|A Donor|1234567890|0|1990|1|0|1|0\n";
+    }
+    struct rlimit restricted_limit = original_limit;
+    restricted_limit.rlim_cur = 0;
+    ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &restricted_limit), 0);
+    Database cannot_open = {};
+    EXPECT_EQ(load_all(&cannot_open), 0);
+    free_database(&cannot_open);
+    ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &original_limit), 0);
+    std::filesystem::remove("donors.txt");
+
+    ASSERT_TRUE(std::filesystem::create_directory("donors.txt"));
+    EXPECT_EQ(save_all(&empty), 0);
 
     std::filesystem::current_path(original);
     std::filesystem::remove_all(temporary);

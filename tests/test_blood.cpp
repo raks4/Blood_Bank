@@ -24,9 +24,14 @@ TEST(BloodTests, DonationBatchAndStockLifecycle)
     EXPECT_EQ(record_donation(&db, &donor, 300, now, &batch_id), RESULT_OK);
     EXPECT_EQ(batch_id, 1);
     EXPECT_EQ(donor.last_donation, now);
+    int next_batch_id = 0;
+    EXPECT_EQ(record_donation(&db, &donor, 300, now + 1L, &next_batch_id), RESULT_OK);
+    EXPECT_EQ(next_batch_id, 2);
     EXPECT_EQ(stock_for_group(&db, 0, now), 0);
     EXPECT_EQ(mark_batch_tested(&db, batch_id, now), RESULT_OK);
     EXPECT_EQ(stock_for_group(&db, 0, now), 300);
+    EXPECT_EQ(mark_batch_tested(&db, 99, now), RESULT_NOT_FOUND);
+    EXPECT_EQ(discard_batch(&db, 99), RESULT_NOT_FOUND);
 
     Batch *batch = find_batch(&db, batch_id);
     ASSERT_NE(batch, nullptr);
@@ -34,6 +39,10 @@ TEST(BloodTests, DonationBatchAndStockLifecycle)
     EXPECT_EQ(batch->ml_left, 0);
     EXPECT_EQ(stock_for_group(&db, 0, now), 0);
     EXPECT_EQ(find_batch(&db, 99), nullptr);
+
+    Batch trailing = {};
+    trailing.id = 3;
+    ASSERT_NE(append_batch(&db, &trailing), nullptr);
 
     free_database(&db);
     EXPECT_EQ(db.batches, nullptr);
@@ -73,6 +82,8 @@ TEST(BloodTests, RequestsUseOldestStockAndTrackStatuses)
     EXPECT_EQ(process_request(&db, request_id, now), RESULT_NOT_ENOUGH_STOCK);
     EXPECT_EQ(reject_request(&db, request_id), RESULT_OK);
     EXPECT_EQ(reject_request(&db, request_id), RESULT_WRONG_STATE);
+    EXPECT_EQ(add_request(&db, "Third Hospital", 0, 50, now, &request_id), RESULT_OK);
+    EXPECT_EQ(request_id, 3);
 
     ::testing::internal::CaptureStdout();
     list_requests(&db);
@@ -83,6 +94,59 @@ TEST(BloodTests, RequestsUseOldestStockAndTrackStatuses)
 
     free_database(&db);
     EXPECT_EQ(db.requests, nullptr);
+}
+
+TEST(BloodTests, ListsExpiredEmptyAndDiscardedBatchesAndHandlesInvalidRequests)
+{
+    Database db = {};
+    const long now = 1000000L;
+    Batch expired = {};
+    expired.id = 1;
+    expired.group = 0;
+    expired.ml_collected = 200;
+    expired.ml_left = 200;
+    expired.expiry = now - 1L;
+    expired.status = BATCH_AVAILABLE;
+    ASSERT_NE(append_batch(&db, &expired), nullptr);
+
+    Batch empty = expired;
+    empty.id = 2;
+    empty.expiry = now;
+    empty.ml_left = 0;
+    ASSERT_NE(append_batch(&db, &empty), nullptr);
+
+    Batch discarded = empty;
+    discarded.id = 3;
+    discarded.status = BATCH_DISCARDED;
+    discarded.ml_left = 100;
+    ASSERT_NE(append_batch(&db, &discarded), nullptr);
+
+    ::testing::internal::CaptureStdout();
+    list_batches(&db, 0, now);
+    const std::string listing = ::testing::internal::GetCapturedStdout();
+    EXPECT_NE(listing.find("expired"), std::string::npos);
+    EXPECT_NE(listing.find("empty"), std::string::npos);
+    EXPECT_NE(listing.find("discarded"), std::string::npos);
+
+    int request_id = 0;
+    EXPECT_EQ(add_request(&db, "Bad group", -1, 100, now, &request_id), RESULT_BAD_INPUT);
+    EXPECT_EQ(add_request(&db, "Bad amount", 0, 0, now, &request_id), RESULT_BAD_INPUT);
+    EXPECT_EQ(add_request(&db, "This hospital name is much too long to fit in the field",
+                          0, 100, now, &request_id), RESULT_BAD_INPUT);
+    EXPECT_EQ(process_request(&db, 99, now), RESULT_NOT_FOUND);
+    EXPECT_EQ(reject_request(&db, 99), RESULT_NOT_FOUND);
+
+    Request pending = {};
+    pending.id = 1;
+    pending.status = REQUEST_PENDING;
+    (void)std::strcpy(pending.hospital, "Pending Hospital");
+    ASSERT_NE(append_request(&db, &pending), nullptr);
+    ::testing::internal::CaptureStdout();
+    list_requests(&db);
+    EXPECT_NE(::testing::internal::GetCapturedStdout().find("pending"),
+              std::string::npos);
+
+    free_database(&db);
 }
 
 TEST(BloodTests, BatchListingAndStockReportShowRelevantRows)
