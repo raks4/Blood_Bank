@@ -1,6 +1,7 @@
 /build/
 /coverage/
+/.vscode/
+/bloodbank
 *.gcov
 /audit.log
 *.txt
-/.vscode/
