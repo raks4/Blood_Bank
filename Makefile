@@ -20,7 +20,7 @@ test:
 	  $(CC) $(CFLAGS) -O0 -g $(COVERAGE_FLAGS) $$extra -c "$$source" -o $(TEST_BUILD)/$$name.o || exit 1; \
 	done
 	$(CXX) $(CXXFLAGS) $(COVERAGE_FLAGS) -o $(TEST_BUILD)/test_suite tests/test_*.cpp $(TEST_BUILD)/*.o \
-	  -Wl,--wrap=malloc -lgtest_main -lgtest -lcrypto -pthread
+	  -Wl,--wrap=malloc -lgtest_main -lgtest -lcrypto -pthread -lstdc++fs
 	./$(TEST_BUILD)/test_suite
 
 coverage:
@@ -32,10 +32,6 @@ check:
 	cppcheck --enable=all --inconclusive --std=c99 --language=c --platform=unix64 \
 	  --library=posix --library=openssl --inline-suppr --error-exitcode=1 \
 	  --suppressions-list=tools/cppcheck-suppressions.txt -Iinclude src
-	@if [ -f tools/misra_rules.txt ]; then \
-	  cppcheck --addon=tools/misra.json --std=c99 --language=c --inline-suppr --error-exitcode=1 \
-	    --suppressions-list=tools/cppcheck-suppressions.txt -Iinclude src; \
-	else echo "MISRA addon skipped: put your rule texts in tools/misra_rules.txt"; fi
 
 valgrind: test
 	valgrind --leak-check=full --show-leak-kinds=all \

@@ -1,0 +1,21 @@
+Appendix A Summary of guidelines
+
+# Project-local, paraphrased descriptions for Cppcheck's MISRA addon.
+# NOT official MISRA-C:2012 text; this is not a complete rule set and does not establish compliance.
+# For authoritative rule descriptions, use a licensed MISRA-C:2012 guideline summary.
+# This file only covers rules noted as potential findings in this project's tools/README.md.
+
+Rule 15.5 Advisory
+R15.5 A function should have a single point of exit at the end.
+
+Rule 21.3 Required
+R21.3 Standard library memory allocation and deallocation functions should not be used.
+
+Rule 21.6 Required
+R21.6 Standard library input/output functions should not be used.
+
+Rule 21.10 Required
+R21.10 The time and date functions from <time.h> should not be used.
+
+Dir 4.6 Advisory
+D4.6 Prefer types that make object size and signedness explicit over plain fundamental types where practical.

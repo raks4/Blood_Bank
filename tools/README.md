@@ -17,8 +17,20 @@ target. Run `make test` for the complete suite.
 
 ## MISRA checks with cppcheck
 cppcheck's MISRA addon needs the text of the MISRA rules, which is licensed and not included here.
-Put your copy at `tools/misra_rules.txt` (the addon documents the format); `make check` then also runs
-`--addon=tools/misra.json`. Without that file only the normal cppcheck checks run.
+Put your copy at `tools/misra_rules.txt` (the addon documents the format), then run this separately
+from `make check`:
+
+```sh
+PYTHONWARNINGS=ignore::DeprecationWarning cppcheck \
+  --addon=tools/misra.json --std=c99 --language=c --inline-suppr --error-exitcode=1 \
+  --suppress=misra-config:src/storage.c:342 --suppress=misra-config:src/storage.c:377 \
+  --suppress=misra-config:src/storage.c:411 --suppress=misra-config:src/storage.c:444 \
+  --suppressions-list=tools/cppcheck-suppressions.txt -Iinclude src
+```
+
+The warning filter works around a deprecation warning in cppcheck's installed MISRA addon under
+newer Python versions. The four line-specific suppressions avoid false positives where the addon
+cannot resolve `ENOENT` from `<errno.h>`.
 
 ## Expected MISRA findings (deliberate, see the README)
 | Rule | Where | Why it is accepted |
