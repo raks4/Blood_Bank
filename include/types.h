@@ -27,7 +27,12 @@
 #define HASH_SIZE               32
 
 /* ---------- Status values stored in the data files ---------- */
-enum { BATCH_WAITING = 0, BATCH_AVAILABLE = 1, BATCH_DISCARDED = 2 };
+enum {
+    BATCH_WAITING = 0,
+    BATCH_AVAILABLE = 1,
+    BATCH_DISCARDED = 2,
+    BATCH_EXPIRED = 3
+};
 enum { REQUEST_PENDING = 0, REQUEST_FULFILLED = 1, REQUEST_REJECTED = 2 };
 
 /* ---------- Result of an operation ---------- */

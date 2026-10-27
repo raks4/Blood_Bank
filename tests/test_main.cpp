@@ -73,7 +73,14 @@ TEST(MainTests, CreatesAccountLogsInRunsDonorMenuAndExits)
         "A+\n"
         "1995\n"
         "2\n"
-        "5\n"
+        "4\n"
+        "1\n"
+        "Alice Updated\n"
+        "9876543211\n"
+        "O-\n"
+        "1994\n"
+        "2\n"
+        "6\n"
         "1\n"
         "y\n"
         "2\n"
@@ -83,6 +90,8 @@ TEST(MainTests, CreatesAccountLogsInRunsDonorMenuAndExits)
     EXPECT_EQ(result.exit_code, 0);
     EXPECT_NE(result.output.find("Welcome, admin!"), std::string::npos);
     EXPECT_NE(result.output.find("Donor added."), std::string::npos);
+    EXPECT_NE(result.output.find("Donor 1 details updated."), std::string::npos);
+    EXPECT_NE(result.output.find("Alice Updated"), std::string::npos);
     EXPECT_NE(result.output.find("Donor 1 was deleted."), std::string::npos);
     EXPECT_NE(result.output.find("0 donor(s) shown."), std::string::npos);
     EXPECT_NE(result.output.find("Goodbye!"), std::string::npos);
@@ -196,6 +205,17 @@ TEST(MainTests, RequestsAndAccountMenusHandleSuccessfulActions)
         "StrongPass123\n"
         "NewStrongPass456\n"
         "NewStrongPass456\n"
+        "3\n"
+        "staff\n"
+        "n\n"
+        "3\n"
+        "missing\n"
+        "y\n"
+        "3\n"
+        "admin\n"
+        "3\n"
+        "staff\n"
+        "y\n"
         "0\n"
         "0\n");
 
@@ -205,6 +225,12 @@ TEST(MainTests, RequestsAndAccountMenusHandleSuccessfulActions)
     EXPECT_NE(result.output.find("Request 1 rejected."), std::string::npos);
     EXPECT_NE(result.output.find("User staff created."), std::string::npos);
     EXPECT_NE(result.output.find("Password changed."), std::string::npos);
+    EXPECT_NE(result.output.find("You cannot delete the account you are currently using."),
+              std::string::npos);
+    EXPECT_NE(result.output.find("Cancelled."), std::string::npos);
+    EXPECT_NE(result.output.find("Could not delete the user: no record with that ID."),
+              std::string::npos);
+    EXPECT_NE(result.output.find("User staff deleted."), std::string::npos);
 }
 
 TEST(MainTests, ExercisesMenuActionsAndFailureResults)
@@ -219,19 +245,19 @@ TEST(MainTests, ExercisesMenuActionsAndFailureResults)
         "1995\n"
         "3\n"
         "A+\n"
-        "4\n"
+        "5\n"
         "99\n"
-        "4\n"
-        "1\n"
-        "4\n"
+        "5\n"
         "1\n"
         "5\n"
+        "1\n"
+        "6\n"
         "1\n"
         "n\n"
-        "5\n"
+        "6\n"
         "99\n"
         "y\n"
-        "5\n"
+        "6\n"
         "1\n"
         "y\n"
         "1\n"
@@ -386,14 +412,20 @@ TEST(MainTests, ActionsHandleEndOfInputAtEachPrompt)
         common + account_menu + "1\n",
         common + account_menu + "2\n",
         std::string("admin\n") + "StrongPass123\n" + "StrongPass123\n",
-        std::string("admin\n") + "StrongPass123\n" + "StrongPass123\n" + "admin\n"
+        std::string("admin\n") + "StrongPass123\n" + "StrongPass123\n" + "admin\n",
+        common + donor_menu + "4\n99\n",
+        common + donor_menu + "4\n1\n",
+        common + donor_menu + "4\n1\nUpdated Name\n",
+        common + donor_menu + "4\n1\nUpdated Name\n1234567890\n",
+        common + donor_menu + "4\n1\nUpdated Name\n1234567890\nA+\n"
     };
 
     for (size_t index = 0U; index < (sizeof(cases) / sizeof(cases[0])); index++) {
-        const std::string &donor_data = (index == 6U) ? existing_donor : "";
+        const std::string &donor_data = ((index == 6U) || (index >= 18U)) ? existing_donor : "";
         const AppResult result = run_app(cases[index], donor_data);
 
-        EXPECT_EQ(result.exit_code, (index >= 16U) ? 1 : 0) << "case " << index;
+        EXPECT_EQ(result.exit_code, ((index >= 16U) && (index <= 17U)) ? 1 : 0)
+            << "case " << index;
     }
 }
 

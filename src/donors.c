@@ -107,6 +107,30 @@ Result add_donor(Database *db, const char *name, const char *phone, int group,
     return result;
 }
 
+Result update_donor_details(const Database *db, int id, const char *name, const char *phone,
+                            int group, int birth_year)
+{
+    Result result = RESULT_OK;
+    Donor *donor = find_donor(db, id);
+    char updated_name[NAME_LEN] = { '\0' };
+    char updated_phone[PHONE_LEN] = { '\0' };
+
+    if (donor == NULL) {
+        result = RESULT_NOT_FOUND;
+    } else if ((name == NULL) || (phone == NULL) || (group < 0) ||
+               (group >= GROUP_COUNT) || (birth_year > current_year()) ||
+               (copy_text(updated_name, NAME_LEN, name) == 0) ||
+               (copy_text(updated_phone, PHONE_LEN, phone) == 0)) {
+        result = RESULT_BAD_INPUT;
+    } else {
+        (void)memcpy(donor->name, updated_name, sizeof(updated_name));
+        (void)memcpy(donor->phone, updated_phone, sizeof(updated_phone));
+        donor->group = group;
+        donor->birth_year = birth_year;
+    }
+    return result;
+}
+
 Result update_donor(Database *db, int id, DonorAction action)
 {
     Result result = RESULT_OK;

@@ -9,6 +9,7 @@ hospital requests, and password-protected users.
     make test
     make check       # cppcheck static analysis
     make valgrind    # run the test suite under Valgrind
+    make helgrind    # check test threads for data races and synchronization errors
     make coverage    # run the tests with gcov and print line/branch coverage
     make clean       # optional: remove generated binaries and coverage reports
     make analyze     # optional: GCC static analysis
@@ -19,6 +20,9 @@ Run it from the same folder every time: the data files are saved there (`donors.
 to `audit.log` with a local timestamp and the acting username. Login attempts, logout, account and
 password changes, donor/donation/inventory/request operations, and list or search views are recorded.
 Passwords and donor names or contact details are not written to the audit log.
+Audit events are queued for a dedicated logger thread and flushed before shutdown. While a user is
+logged in, a maintenance thread checks hourly for inactive donors and expired blood batches; those
+changes are saved and recorded in the audit log. Both workers are stopped cleanly on exit.
 
 ## Tests and coverage
 Run the GoogleTest suite:
@@ -38,9 +42,9 @@ Every module has a header in `include/` (what it offers) and a source file in `s
 | Header (`include/`) | Source (`src/`) | What it is |
 |---|---|---|
 | `types.h` | - | The limits and rules, and every structure (`Donor`, `Batch`, `Request`, `User`, `Database`). Start here. |
-| `donors.h` | `donors.c` | The linked list of donors: add, find, deactivate, list, "may this donor give blood today?". |
+| `donors.h` | `donors.c` | The linked list of donors: add, find, update details, deactivate, list, "may this donor give blood today?". |
 | `blood.h` | `blood.c` | Batches (one donation = one batch), stock per blood group, and requests. |
-| `users.h` | `users.c` | Login accounts. Passwords are stored only as a salted hash. |
+| `users.h` | `users.c` | Login accounts. Passwords are stored only as a salted hash; accounts can be deleted by username. |
 | `storage.h` | `storage.c` | Saving and loading the four text files. |
 | `audit.h` | `audit.c` | Timestamped audit events in `audit.log`. |
 | `utils.h` | `utils.c` | Safe keyboard input, dates, and small helpers. |
@@ -59,9 +63,11 @@ Every module has a header in `include/` (what it offers) and a source file in `s
 Donors must be 18 to 65 and wait 56 days between donations; a donation is 200 to 600 ml; blood lasts
 35 days; stock under 1000 ml of a group is shown as LOW STOCK.
 
-Active donors are automatically deactivated at startup after 180 days without a donation (or without
-activity since registration if they have never donated). Deactivated donors are automatically deleted
-after 30 days. These month-based periods use 30-day months. Staff can also delete a donor profile from
+Active donors are automatically deactivated at startup and checked hourly while logged in after
+180 days without a donation (or without activity since registration if they have never donated).
+Deactivated donors are automatically deleted after 30 days. These month-based periods use 30-day
+months. Blood batches older than their 35-day shelf life are marked expired and removed from stock,
+with an hourly check while logged in. Staff can also delete a donor profile from
 the Donors menu; the donor's batch and donation history remains stored by donor ID.
 Older donor data files remain readable; donors that have never donated start their registration timer
 when the old record is first loaded.

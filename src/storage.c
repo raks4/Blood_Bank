@@ -386,7 +386,7 @@ static int load_batches(Database *db)
             if ((batch.id < 1) || (contains_batch(db, batch.id) != 0) ||
                 (group_is_valid(batch.group) == 0) || (batch.ml_left < 0) ||
                 (batch.ml_left > batch.ml_collected) || (batch.status < BATCH_WAITING) ||
-                (batch.status > BATCH_DISCARDED)) {
+                (batch.status > BATCH_EXPIRED)) {
                 ok = 0;
             } else if (append_batch_record(db, &batch) == 0) {
                 ok = 0;

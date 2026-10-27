@@ -126,6 +126,28 @@ Result create_user(Database *db, const char *username, const char *password)
     return result;
 }
 
+Result delete_user(Database *db, const char *username)
+{
+    Result result = RESULT_NOT_FOUND;
+    User **link = &db->users;
+
+    if (username == NULL) {
+        result = RESULT_BAD_INPUT;
+    } else {
+        while ((*link != NULL) && (strcmp((*link)->username, username) != 0)) {
+            link = &(*link)->next;
+        }
+        if (*link != NULL) {
+            User *removed = *link;
+
+            *link = removed->next;
+            free(removed);
+            result = RESULT_OK;
+        }
+    }
+    return result;
+}
+
 Result change_password(User *user, const char *old_password, const char *new_password)
 {
     Result result = RESULT_OK;

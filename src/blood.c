@@ -141,6 +141,23 @@ Result update_batch(const Database *db, int id, BatchAction action, long now)
     return result;
 }
 
+int expire_batches(Database *db, long now)
+{
+    Batch *current = db->batches;
+    int expired = 0;
+
+    while (current != NULL) {
+        if ((current->expiry < now) && (current->status != BATCH_DISCARDED) &&
+            (current->status != BATCH_EXPIRED)) {
+            current->status = BATCH_EXPIRED;
+            current->ml_left = 0;
+            expired++;
+        }
+        current = current->next;
+    }
+    return expired;
+}
+
 /* Can this batch be given to a hospital today? */
 static int batch_is_usable(const Batch *batch, long now)
 {
@@ -186,7 +203,7 @@ static const char *batch_status_text(const Batch *batch, long now)
 
     if (batch->status == BATCH_DISCARDED) {
         text = "discarded";
-    } else if (batch->expiry < now) {
+    } else if ((batch->status == BATCH_EXPIRED) || (batch->expiry < now)) {
         text = "expired";
     } else if (batch->status == BATCH_WAITING) {
         text = "waiting for tests";

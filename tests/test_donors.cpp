@@ -151,6 +151,21 @@ TEST(DonorTests, UpdateDonor)
     EXPECT_EQ(update_donor(&db, 99, DONOR_DELETE), RESULT_NOT_FOUND);
     EXPECT_EQ(update_donor(&db, 1, (DonorAction)99), RESULT_BAD_INPUT);
 
+    EXPECT_EQ(update_donor_details(&db, 99, "Changed", "1234567890", 1,
+                                   current_year() - 25), RESULT_NOT_FOUND);
+    EXPECT_EQ(update_donor_details(&db, 1, "Changed", "1234567890", GROUP_COUNT,
+                                   current_year() - 25), RESULT_BAD_INPUT);
+    const std::string too_long_name(NAME_LEN, 'n');
+    EXPECT_EQ(update_donor_details(&db, 1, too_long_name.c_str(), "1234567890", 1,
+                                   current_year() - 25), RESULT_BAD_INPUT);
+    EXPECT_STREQ(find_donor(&db, 1)->name, "Donor 1");
+    EXPECT_EQ(update_donor_details(&db, 1, "Updated Donor", "1234567890", 1,
+                                   current_year() - 25), RESULT_OK);
+    EXPECT_STREQ(find_donor(&db, 1)->name, "Updated Donor");
+    EXPECT_STREQ(find_donor(&db, 1)->phone, "1234567890");
+    EXPECT_EQ(find_donor(&db, 1)->group, 1);
+    EXPECT_EQ(find_donor(&db, 1)->birth_year, current_year() - 25);
+
     /* deactivate: ok, then wrong state */
     EXPECT_EQ(update_donor(&db, 2, DONOR_DEACTIVATE), RESULT_OK);
     EXPECT_EQ(find_donor(&db, 2)->active, 0);

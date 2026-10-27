@@ -1,5 +1,8 @@
 PYTHONWARNINGS=ignore::DeprecationWarning cppcheck \
   --addon=tools/misra.json --std=c99 --language=c --inline-suppr --error-exitcode=1 \
+  -D_POSIX_C_SOURCE=200809L \
+  --suppress=misra-config:src/main.c:66 --suppress=misra-config:src/main.c:76 \
+  --suppress=misra-config:src/main.c:79 \
   --suppress=misra-config:src/storage.c:342 --suppress=misra-config:src/storage.c:377 \
   --suppress=misra-config:src/storage.c:411 --suppress=misra-config:src/storage.c:444 \
   --suppressions-list=tools/cppcheck-suppressions.txt -Iinclude src

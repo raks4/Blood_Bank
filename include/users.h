@@ -6,6 +6,7 @@
 
 User       *authenticate_user(const Database *db, const char *username, const char *password);
 Result      create_user(Database *db, const char *username, const char *password);
+Result      delete_user(Database *db, const char *username);
 Result      change_password(User *user, const char *old_password, const char *new_password);
 
 #endif

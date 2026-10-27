@@ -240,6 +240,8 @@ TEST_F(StorageTests, SaveAll)
     add_donor_node(&db, 2, "Second Donor", 0);
     add_batch_node(&db, 1);
     add_batch_node(&db, 2);
+    db.batches->next->status = BATCH_EXPIRED;
+    db.batches->next->ml_left = 0;
     add_request_node(&db, 1);
     add_user_node(&db, "staff", 10U, 20U);
     add_user_node(&db, "admin", 0x0fU, 0xf0U);
@@ -250,7 +252,7 @@ TEST_F(StorageTests, SaveAll)
               "2|Second Donor|9876543210|2|1990|0|77|5|9\n");
     EXPECT_EQ(read_file("batches.txt"),
               "1|1|2|300|250|1000|2000|1\n"
-              "2|1|2|300|250|1000|2000|1\n");
+              "2|1|2|300|0|1000|2000|3\n");
     EXPECT_EQ(read_file("requests.txt"), "1|City Hospital|2|100|1500|0\n");
     const std::string users = read_file("users.txt");
     EXPECT_EQ(users.find("staff|0a"), 0U);
@@ -266,6 +268,10 @@ TEST_F(StorageTests, SaveAll)
     ASSERT_EQ(try_load(&loaded), 1);
     ASSERT_NE(loaded.donors, nullptr);
     EXPECT_STREQ(loaded.donors->name, "Avery Donor");
+    ASSERT_NE(loaded.batches, nullptr);
+    ASSERT_NE(loaded.batches->next, nullptr);
+    EXPECT_EQ(loaded.batches->next->status, BATCH_EXPIRED);
+    EXPECT_EQ(loaded.batches->next->ml_left, 0);
     ASSERT_NE(loaded.users, nullptr);
     EXPECT_EQ(loaded.users->salt[0], 10U);
     EXPECT_EQ(loaded.users->hash[HASH_SIZE - 1], 0xcdU);
@@ -441,7 +447,7 @@ TEST_F(StorageTests, LoadAll)
         "1|1|2|300|-1|1000|2000|1\n",                             /* negative ml_left           */
         "1|1|2|300|301|1000|2000|1\n",                            /* more left than collected   */
         "1|1|2|300|250|1000|2000|-1\n",                           /* status below range         */
-        "1|1|2|300|250|1000|2000|3\n",                            /* status above range         */
+        "1|1|2|300|250|1000|2000|4\n",                            /* status above range         */
         "malformed batch\n",                                      /* not a record               */
         "1|1|2|300|250|1000|2000|1\n"
         "malformed batch\n",                                      /* damage after a good record */

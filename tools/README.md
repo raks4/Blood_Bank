@@ -3,6 +3,7 @@
     make check      # cppcheck on src/ (warnings, style, performance, portability, unused code)
     make analyze    # gcc -fanalyzer plus extra warnings (needs only gcc)
     make valgrind   # run memory-focused tests under Valgrind
+    make helgrind   # check test threads for data races and synchronization errors
 
 ## cppcheck
 Install: `sudo apt install cppcheck` (version 2.x recommended). `make check` fails (exit code 1) on any
@@ -14,6 +15,12 @@ the blood, donor, storage and utility tests with full leak checks. It skips the 
 which spend most of their runtime in password hashing. Invalid memory accesses and definite or indirect
 leaks cause a nonzero exit code; other leak categories are printed for inspection but do not fail the
 target. Run `make test` for the complete suite.
+
+## Helgrind
+Install: `sudo apt install valgrind`. `make helgrind` builds the debug-enabled test suite and runs
+all tests under Valgrind's Helgrind thread checker. It reports potential data races, incorrect
+mutex/condition-variable usage, and lock-order problems. Thread checking is slower than a regular
+test run; a nonzero exit indicates Helgrind found errors (or the test/build failed).
 
 ## MISRA checks with cppcheck
 cppcheck's MISRA addon needs the text of the MISRA rules, which is licensed and not included here.
@@ -29,8 +36,9 @@ PYTHONWARNINGS=ignore::DeprecationWarning cppcheck \
 ```
 
 The warning filter works around a deprecation warning in cppcheck's installed MISRA addon under
-newer Python versions. The four line-specific suppressions avoid false positives where the addon
-cannot resolve `ENOENT` from `<errno.h>`.
+newer Python versions. The line-specific `misra-config` suppressions avoid false positives where
+the addon cannot resolve POSIX constants (`ENOENT`, `CLOCK_REALTIME`, and `ETIMEDOUT`) from system
+headers. `_POSIX_C_SOURCE` is defined for the analysis to match the build configuration.
 
 ## Expected MISRA findings (deliberate, see the README)
 | Rule | Where | Why it is accepted |

@@ -123,6 +123,19 @@ TEST(UserTests, CreateUser)
     g_fail_malloc_size = 0U;
 
     EXPECT_EQ(db.users->next->next->next, nullptr);
+
+    EXPECT_EQ(delete_user(&db, "bob"), RESULT_OK);
+    ASSERT_NE(db.users, nullptr);
+    ASSERT_NE(db.users->next, nullptr);
+    EXPECT_STREQ(db.users->username, "alice");
+    EXPECT_STREQ(db.users->next->username, "carol");
+    EXPECT_EQ(delete_user(&db, "missing"), RESULT_NOT_FOUND);
+    EXPECT_EQ(delete_user(&db, nullptr), RESULT_BAD_INPUT);
+    EXPECT_EQ(delete_user(&db, "alice"), RESULT_OK);
+    EXPECT_STREQ(db.users->username, "carol");
+    EXPECT_EQ(delete_user(&db, "carol"), RESULT_OK);
+    EXPECT_EQ(db.users, nullptr);
+
     free_users(&db);
 }
 

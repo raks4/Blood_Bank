@@ -2,12 +2,12 @@
 CC = gcc
 CXX = g++
 
-CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow -pthread
 CXXFLAGS = -std=c++17 -Iinclude -Itests -Wall -Wextra -O0 -g
 TEST_BUILD = build/tests
 COVERAGE_FLAGS =
 
-.PHONY: all test coverage check analyze valgrind clean
+.PHONY: all test coverage check analyze valgrind helgrind clean
 
 all:
 	$(CC) $(CFLAGS) -O2 -o bloodbank src/*.c -lcrypto
@@ -37,6 +37,9 @@ valgrind: test
 	valgrind --leak-check=full --show-leak-kinds=all \
 	  --errors-for-leak-kinds=definite,indirect --error-exitcode=1 \
 	  ./$(TEST_BUILD)/test_suite --gtest_filter=-MainTests.*:UserTests.*
+
+helgrind: test
+	valgrind --tool=helgrind --error-exitcode=1 ./$(TEST_BUILD)/test_suite
 
 clean:
 	rm -f bloodbank *.tmp *.gcov

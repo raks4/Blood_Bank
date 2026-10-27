@@ -123,6 +123,7 @@ TEST(BloodTests, UpdateBatch)
     append_test_batch(&db, 1, 1, 0, 100, NOW + 100L, BATCH_WAITING);   /* normal waiting batch  */
     append_test_batch(&db, 2, 1, 0, 100, NOW - 1L, BATCH_WAITING);     /* waiting but expired   */
     append_test_batch(&db, 3, 1, 0, 100, NOW + 100L, BATCH_AVAILABLE); /* already tested        */
+    append_test_batch(&db, 4, 1, 0, 100, NOW - 1L, BATCH_AVAILABLE);   /* available but expired */
 
     EXPECT_EQ(update_batch(&db, 99, BATCH_TEST, NOW), RESULT_NOT_FOUND);
     EXPECT_EQ(update_batch(&db, 1, (BatchAction)99, NOW), RESULT_BAD_INPUT);
@@ -139,6 +140,12 @@ TEST(BloodTests, UpdateBatch)
     EXPECT_EQ(find_test_batch(&db, 1)->status, BATCH_DISCARDED);
     EXPECT_EQ(find_test_batch(&db, 1)->ml_left, 0);
     EXPECT_EQ(update_batch(&db, 1, BATCH_DISCARD, NOW), RESULT_WRONG_STATE);
+
+    EXPECT_EQ(expire_batches(&db, NOW), 2);
+    EXPECT_EQ(find_test_batch(&db, 2)->status, BATCH_EXPIRED);
+    EXPECT_EQ(find_test_batch(&db, 2)->ml_left, 0);
+    EXPECT_EQ(find_test_batch(&db, 4)->status, BATCH_EXPIRED);
+    EXPECT_EQ(expire_batches(&db, NOW), 0);
 
     free_database(&db);
 }

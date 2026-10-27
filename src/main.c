@@ -1,4 +1,8 @@
 /* main.c - the menus. Each menu is a loop that asks for a number and runs one action. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "types.h"
 #include "utils.h"
 #include "donors.h"
@@ -7,8 +11,21 @@
 #include "storage.h"
 #include "audit.h"
 
+#include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+
+#define MAINTENANCE_INTERVAL_SECONDS 3600L
+
+static pthread_mutex_t db_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t maintenance_condition = PTHREAD_COND_INITIALIZER;
+static pthread_t maintenance_thread;
+static int maintenance_running;
+static int maintenance_thread_started;
+
+static void save_or_warn(const Database *db);
 
 static const char *const group_names[GROUP_COUNT] = {
     "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
@@ -39,6 +56,84 @@ static void log_action_id(const char *action, int id)
 
     (void)snprintf(details, sizeof(details), "%s (ID %d)", action, id);
     log_action(details);
+}
+
+static void *maintenance_worker(void *argument)
+{
+    Database *db = argument;
+    int wait_error = 0;
+
+    (void)pthread_mutex_lock(&db_mutex);
+    while ((maintenance_running != 0) && (wait_error == 0)) {
+        struct timespec deadline;
+
+        if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) {
+            fprintf(stderr, "WARNING: could not schedule expiry monitoring\n");
+            wait_error = 1;
+        } else {
+            int wait_result = 0;
+
+            deadline.tv_sec += MAINTENANCE_INTERVAL_SECONDS;
+            while ((maintenance_running != 0) && (wait_result == 0)) {
+                wait_result = pthread_cond_timedwait(&maintenance_condition, &db_mutex, &deadline);
+            }
+            if ((wait_result != 0) && (wait_result != ETIMEDOUT)) {
+                fprintf(stderr, "WARNING: expiry monitoring wait failed\n");
+                wait_error = 1;
+            } else if ((maintenance_running != 0) && (wait_result == ETIMEDOUT)) {
+                const long now = today();
+                const int donor_changes = update_donor_statuses(db, now);
+                const int expired_batches = expire_batches(db, now);
+
+                if ((donor_changes > 0) || (expired_batches > 0)) {
+                    save_or_warn(db);
+                }
+                if (donor_changes > 0) {
+                    log_action_for("system", "automatic donor status updates applied");
+                }
+                if (expired_batches > 0) {
+                    log_action_for("system", "expired blood batches removed from stock");
+                }
+            }
+        }
+    }
+    (void)pthread_mutex_unlock(&db_mutex);
+    return NULL;
+}
+
+static void start_maintenance(Database *db)
+{
+    (void)pthread_mutex_lock(&db_mutex);
+    if (maintenance_thread_started == 0) {
+        maintenance_running = 1;
+        if (pthread_create(&maintenance_thread, NULL, maintenance_worker, db) == 0) {
+            maintenance_thread_started = 1;
+        } else {
+            maintenance_running = 0;
+            fprintf(stderr, "WARNING: could not start expiry monitoring\n");
+        }
+    }
+    (void)pthread_mutex_unlock(&db_mutex);
+}
+
+static void stop_maintenance(void)
+{
+    int join_thread = 0;
+
+    (void)pthread_mutex_lock(&db_mutex);
+    if (maintenance_thread_started != 0) {
+        maintenance_running = 0;
+        join_thread = 1;
+        (void)pthread_cond_signal(&maintenance_condition);
+    }
+    (void)pthread_mutex_unlock(&db_mutex);
+
+    if (join_thread != 0) {
+        (void)pthread_join(maintenance_thread, NULL);
+        (void)pthread_mutex_lock(&db_mutex);
+        maintenance_thread_started = 0;
+        (void)pthread_mutex_unlock(&db_mutex);
+    }
 }
 
 static const char *result_text(Result result)
@@ -154,6 +249,46 @@ static void deactivate_donor_action(Database *db)
     }
 }
 
+static void update_donor_details_action(const Database *db)
+{
+    int id = 0;
+    char name[NAME_LEN];
+    char phone[PHONE_LEN];
+    int group = 0;
+    int birth_year = 0;
+    Result result;
+
+    if (ask_number("ID of the donor to update: ", 1, 1000000, &id) == 0) {
+        return;
+    }
+    if (find_donor(db, id) == NULL) {
+        printf("Could not update the donor: %s.\n", result_text(RESULT_NOT_FOUND));
+        log_action_id("donor update failed", id);
+        return;
+    }
+    if (ask_text("Full name: ", name, (int)sizeof(name)) == 0) {
+        return;
+    }
+    if (ask_phone("Phone number: ", phone, (int)sizeof(phone)) == 0) {
+        return;
+    }
+    if (ask_group("Blood group (A+ A- B+ B- AB+ AB- O+ O-): ", &group) == 0) {
+        return;
+    }
+    if (ask_number("Year of birth: ", current_year() - 120, current_year(), &birth_year) == 0) {
+        return;
+    }
+    result = update_donor_details(db, id, name, phone, group, birth_year);
+    if (result == RESULT_OK) {
+        printf("Donor %d details updated.\n", id);
+        save_or_warn(db);
+        log_action_id("donor details updated", id);
+    } else {
+        printf("Could not update the donor: %s.\n", result_text(result));
+        log_action_id("donor update failed", id);
+    }
+}
+
 static void delete_donor_action(Database *db)
 {
     int id = 0;
@@ -190,12 +325,14 @@ static void donor_menu(Database *db)
         printf("1) Add a donor\n");
         printf("2) List all donors\n");
         printf("3) Search donors by blood group\n");
-        printf("4) Deactivate a donor\n");
-        printf("5) Delete a donor\n");
+        printf("4) Update donor details\n");
+        printf("5) Deactivate a donor\n");
+        printf("6) Delete a donor\n");
         printf("0) Back\n");
-        if (ask_number("Choose: ", 0, 5, &choice) == 0) {
+        if (ask_number("Choose: ", 0, 6, &choice) == 0) {
             choice = 0;
         }
+        (void)pthread_mutex_lock(&db_mutex);
         switch (choice) {
         case 1: add_donor_action(db); break;
         case 2:
@@ -211,10 +348,12 @@ static void donor_menu(Database *db)
             }
             break;
         }
-        case 4: deactivate_donor_action(db); break;
-        case 5: delete_donor_action(db); break;
+        case 4: update_donor_details_action(db); break;
+        case 5: deactivate_donor_action(db); break;
+        case 6: delete_donor_action(db); break;
         default: break;
         }
+        (void)pthread_mutex_unlock(&db_mutex);
     }
 }
 
@@ -276,6 +415,7 @@ static void donation_menu(Database *db)
         if (ask_number("Choose: ", 0, 3, &choice) == 0) {
             choice = 0;
         }
+        (void)pthread_mutex_lock(&db_mutex);
         switch (choice) {
         case 1: record_donation_action(db); break;
         case 2: {
@@ -293,6 +433,7 @@ static void donation_menu(Database *db)
             break;
         default: break;
         }
+        (void)pthread_mutex_unlock(&db_mutex);
     }
 }
 
@@ -371,6 +512,7 @@ static void inventory_menu(const Database *db)
         if (ask_number("Choose: ", 0, 5, &choice) == 0) {
             choice = 0;
         }
+        (void)pthread_mutex_lock(&db_mutex);
         switch (choice) {
         case 1:
             show_stock(db, today());
@@ -393,6 +535,7 @@ static void inventory_menu(const Database *db)
         case 5: discard_batch_action(db); break;
         default: break;
         }
+        (void)pthread_mutex_unlock(&db_mutex);
     }
 }
 
@@ -482,6 +625,7 @@ static void request_menu(Database *db)
         if (ask_number("Choose: ", 0, 4, &choice) == 0) {
             choice = 0;
         }
+        (void)pthread_mutex_lock(&db_mutex);
         switch (choice) {
         case 1: new_request_action(db); break;
         case 2: process_request_action(db); break;
@@ -492,6 +636,7 @@ static void request_menu(Database *db)
             break;
         default: break;
         }
+        (void)pthread_mutex_unlock(&db_mutex);
     }
 }
 
@@ -566,6 +711,38 @@ static void change_password_action(const Database *db, User *me)
     wipe(new_password, (int)sizeof(new_password));
 }
 
+static void delete_user_action(Database *db, const User *me)
+{
+    char username[USERNAME_LEN];
+    int yes = 0;
+    Result result;
+
+    if (ask_text("Username of the account to delete: ", username, (int)sizeof(username)) == 0) {
+        return;
+    }
+    if (strcmp(username, me->username) == 0) {
+        printf("You cannot delete the account you are currently using.\n");
+        log_action("user account deletion rejected for current user");
+        return;
+    }
+    if (ask_yes("Delete this user account? (y/n): ", &yes) == 0) {
+        return;
+    }
+    if (yes == 0) {
+        printf("Cancelled.\n");
+        return;
+    }
+    result = delete_user(db, username);
+    if (result == RESULT_OK) {
+        printf("User %s deleted.\n", username);
+        save_or_warn(db);
+        log_action("user account deleted");
+    } else {
+        printf("Could not delete the user: %s.\n", result_text(result));
+        log_action("user account deletion failed");
+    }
+}
+
 static void account_menu(Database *db, User *me)
 {
     int choice = -1;
@@ -574,15 +751,19 @@ static void account_menu(Database *db, User *me)
         printf("\n=== ACCOUNTS ===\n");
         printf("1) Add a user\n");
         printf("2) Change my password\n");
+        printf("3) Delete a user account\n");
         printf("0) Back\n");
-        if (ask_number("Choose: ", 0, 2, &choice) == 0) {
+        if (ask_number("Choose: ", 0, 3, &choice) == 0) {
             choice = 0;
         }
+        (void)pthread_mutex_lock(&db_mutex);
         switch (choice) {
         case 1: add_user_action(db); break;
         case 2: change_password_action(db, me); break;
+        case 3: delete_user_action(db, me); break;
         default: break;
         }
+        (void)pthread_mutex_unlock(&db_mutex);
     }
 }
 
@@ -685,9 +866,23 @@ int main(void)
     if (load_all(&db) == 0) {
         fprintf(stderr, "The data files are damaged. Nothing was changed. Restore them and try again.\n");
     } else {
-        if (update_donor_statuses(&db, today()) > 0) {
-            save_or_warn(&db);
-            log_action_for("system", "automatic donor status updates applied");
+        if (audit_logger_start() == 0) {
+            fprintf(stderr, "WARNING: could not start asynchronous audit logging\n");
+        }
+        {
+            const long now = today();
+            const int donor_changes = update_donor_statuses(&db, now);
+            const int expired_batches = expire_batches(&db, now);
+
+            if ((donor_changes > 0) || (expired_batches > 0)) {
+                save_or_warn(&db);
+            }
+            if (donor_changes > 0) {
+                log_action_for("system", "automatic donor status updates applied");
+            }
+            if (expired_batches > 0) {
+                log_action_for("system", "expired blood batches removed from stock");
+            }
         }
         if (db.users == NULL) {
             first_run_setup(&db);
@@ -698,9 +893,12 @@ int main(void)
         }
         if (me != NULL) {
             active_username = me->username;
+            start_maintenance(&db);
             main_menu(&db, me);
+            stop_maintenance();
             exit_code = 0;
         }
+        audit_logger_stop();
     }
     free_database(&db);
     return exit_code;

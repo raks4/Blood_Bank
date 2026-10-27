@@ -6,6 +6,7 @@
 
 Result      record_donation(Database *db, Donor *donor, int ml, long now, int *batch_id);
 Result      update_batch(const Database *db, int id, BatchAction action, long now);
+int         expire_batches(Database *db, long now);
 int         stock_for_group(const Database *db, int group, long now);
 void        show_stock(const Database *db, long now);
 void        list_batches(const Database *db, int donor_id, long now);
