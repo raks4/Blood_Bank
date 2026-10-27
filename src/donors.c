@@ -18,13 +18,29 @@ static const char *donor_group_name(int group)
 
 static int copy_text(char *destination, int size, const char *source)
 {
-    int length = (int)strlen(source);
+    int length = 0;
+
+    if (source == NULL) {
+        return 0;
+    }
+    length = (int)strlen(source);
 
     if (length >= size) {
         return 0;
     }
     (void)memcpy(destination, source, (size_t)length + 1U);
     return 1;
+}
+
+static int donor_phone_exists(const Database *db, const char *phone, int except_id)
+{
+    const Donor *current = db->donors;
+
+    while ((current != NULL) &&
+           ((current->id == except_id) || (strcmp(current->phone, phone) != 0))) {
+        current = current->next;
+    }
+    return (current != NULL) ? 1 : 0;
 }
 
 /* Walks along the list until it finds the donor with this ID. */
@@ -99,6 +115,8 @@ Result add_donor(Database *db, const char *name, const char *phone, int group,
     } else if ((copy_text(donor.name, NAME_LEN, name) == 0) ||
                (copy_text(donor.phone, PHONE_LEN, phone) == 0)) {
         result = RESULT_BAD_INPUT;
+    } else if (donor_phone_exists(db, donor.phone, 0) != 0) {
+        result = RESULT_EXISTS;
     } else if (append_donor(db, &donor) == NULL) {
         result = RESULT_NO_MEMORY;
     } else {
@@ -122,6 +140,8 @@ Result update_donor_details(const Database *db, int id, const char *name, const 
                (copy_text(updated_name, NAME_LEN, name) == 0) ||
                (copy_text(updated_phone, PHONE_LEN, phone) == 0)) {
         result = RESULT_BAD_INPUT;
+    } else if (donor_phone_exists(db, updated_phone, id) != 0) {
+        result = RESULT_EXISTS;
     } else {
         (void)memcpy(donor->name, updated_name, sizeof(updated_name));
         (void)memcpy(donor->phone, updated_phone, sizeof(updated_phone));

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -27,7 +28,7 @@ static Donor *append_test_donor(Database *db, int id, int group, int active)
     node->active = active;
     node->birth_year = current_year() - 30;
     (void)std::snprintf(node->name, sizeof(node->name), "Donor %d", id);
-    (void)std::strcpy(node->phone, "9876543210");
+    (void)std::snprintf(node->phone, sizeof(node->phone), "9876543%03d", id);
     Donor **link = &db->donors;
     while (*link != nullptr) {
         link = &(*link)->next;
@@ -106,11 +107,15 @@ TEST(DonorTests, AddDonor)
 
     EXPECT_EQ(add_donor(&db, "Second", "1234567890", GROUP_COUNT - 1, year, &id), RESULT_OK);
     EXPECT_EQ(id, 2);
-    EXPECT_EQ(add_donor(&db, "Third", "1234567890", 1, year - 40, &id), RESULT_OK);
+    EXPECT_EQ(add_donor(&db, "Third", "1234567891", 1, year - 40, &id), RESULT_OK);
     EXPECT_EQ(id, 3);
     ASSERT_NE(db.donors->next, nullptr);
     ASSERT_NE(db.donors->next->next, nullptr);
     EXPECT_EQ(db.donors->next->next->id, 3);
+    EXPECT_EQ(add_donor(&db, "Duplicate Phone", "1234567890", 0, year - 25, &id),
+              RESULT_EXISTS);
+    EXPECT_EQ(id, 3);
+    EXPECT_EQ(db.donors->next->next->next, nullptr);
 
     /* bad input: group, birth year in the future, name too long, phone too long */
     EXPECT_EQ(add_donor(&db, "X", "1234567890", -1, year - 25, &id), RESULT_BAD_INPUT);
@@ -124,7 +129,7 @@ TEST(DonorTests, AddDonor)
 
     /* out of memory: nothing is added */
     g_fail_next_malloc = true;
-    const Result failed = add_donor(&db, "No Memory", "1234567890", 0, year - 25, &id);
+    const Result failed = add_donor(&db, "No Memory", "4444444444", 0, year - 25, &id);
     g_fail_next_malloc = false;
     EXPECT_EQ(failed, RESULT_NO_MEMORY);
     EXPECT_EQ(id, 3);
@@ -133,7 +138,7 @@ TEST(DonorTests, AddDonor)
     /* the new ID also looks at old batches, so IDs of deleted donors are not reused */
     append_test_batch(&db, 2);                                    /* lower than highest donor  */
     append_test_batch(&db, 20);                                   /* higher than every donor   */
-    EXPECT_EQ(add_donor(&db, "After History", "1234567890", 0, year - 25, &id), RESULT_OK);
+    EXPECT_EQ(add_donor(&db, "After History", "5555555555", 0, year - 25, &id), RESULT_OK);
     EXPECT_EQ(id, 21);
 
     free_test_donors(&db);
@@ -159,6 +164,11 @@ TEST(DonorTests, UpdateDonor)
     EXPECT_EQ(update_donor_details(&db, 1, too_long_name.c_str(), "1234567890", 1,
                                    current_year() - 25), RESULT_BAD_INPUT);
     EXPECT_STREQ(find_donor(&db, 1)->name, "Donor 1");
+    EXPECT_EQ(update_donor_details(&db, 1, "Changed", "9876543002", 1,
+                                   current_year() - 25), RESULT_EXISTS);
+    EXPECT_STREQ(find_donor(&db, 1)->name, "Donor 1");
+    EXPECT_STREQ(find_donor(&db, 1)->phone, "9876543001");
+    EXPECT_EQ(find_donor(&db, 1)->group, 0);
     EXPECT_EQ(update_donor_details(&db, 1, "Updated Donor", "1234567890", 1,
                                    current_year() - 25), RESULT_OK);
     EXPECT_STREQ(find_donor(&db, 1)->name, "Updated Donor");
