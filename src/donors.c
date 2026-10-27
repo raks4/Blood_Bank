@@ -85,7 +85,7 @@ Result add_donor(Database *db, const char *name, const char *phone, int group,
                  int birth_year, int *new_id)
 {
     Result result = RESULT_OK;
-    Donor donor;
+    Donor donor = {0};
 
     donor.id = next_donor_id(db);
     donor.group = group;

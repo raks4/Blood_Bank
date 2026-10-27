@@ -91,7 +91,7 @@ static Batch *append_batch(Database *db, const Batch *source)
 Result record_donation(Database *db, Donor *donor, int ml, long now, int *batch_id)
 {
     Result result = RESULT_OK;
-    Batch batch;
+    Batch batch = {0};
 
     if ((ml < MIN_DONATION_ML) || (ml > MAX_DONATION_ML)) {
         result = RESULT_BAD_INPUT;
@@ -315,7 +315,7 @@ static Request *append_request(Database *db, const Request *source)
 Result add_request(Database *db, const char *hospital, int group, int ml, long now, int *new_id)
 {
     Result result = RESULT_OK;
-    Request request;
+    Request request = {0};
 
     request.id = next_request_id(db);
     request.group = group;

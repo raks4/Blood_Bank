@@ -108,7 +108,7 @@ User *authenticate_user(const Database *db, const char *username, const char *pa
 Result create_user(Database *db, const char *username, const char *password)
 {
     Result result = RESULT_OK;
-    User user;
+    User user = {0};
 
     if (find_user(db, username) != NULL) {
         result = RESULT_EXISTS;
